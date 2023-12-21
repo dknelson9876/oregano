@@ -58,6 +58,72 @@ func main() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
 
+	// Use helper to detect country and lang from env/config
+	countries, lang := DetectRegion()
+
+	// Load the plaid environment from the config
+	viper.SetDefault("plaid.environment", "sandbox")
+	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
+
+	var plaidEnv plaid.Environment
+	switch plaidEnvStr {
+	case "sandbox":
+		plaidEnv = plaid.Sandbox
+	case "development":
+		plaidEnv = plaid.Development
+	default:
+		log.Fatalln("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
+	}
+
+	// check that the required plaid api keys are present
+	if !viper.IsSet("plaid.client_id") {
+		log.Println("⚠️  PLAID_CLIENT_ID not set. Please set in as an envvar or in config.json.")
+		os.Exit(1)
+	}
+	if !viper.IsSet("plaid.secret") {
+		log.Println("⚠️ PLAID_SECRET not set. Please set in as an envvar or in config.json.")
+		os.Exit(1)
+	}
+
+	// Build the plaid client using their library
+	opts := plaid.NewConfiguration()
+	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
+	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
+	opts.UseEnvironment(plaidEnv)
+	client := plaid.NewAPIClient(opts)
+
+	// ----- Begin new item (account) specific things ----------
+
+	// Build a linker struct to run Plaid Link
+	linker := ocli.NewLinker(data, client, countries, lang)
+	port := viper.GetString("link.port")
+
+	// Attempt to run link in a browser window
+	var tokenPair *ocli.TokenPair
+	tokenPair, err = linker.Link(port)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println("Institution linked!")
+	log.Printf("Item ID: %s\n", tokenPair.ItemID)
+
+	// If an alias already exists, print it
+	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
+		log.Printf("Alias: %s\n", alias)
+		return
+	}
+
+	// Store the long term access token from plaid
+	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
+	// err = data.Save()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	//-------
+}
+
+func DetectRegion() ([]string, string) {
 	// A whole bunch of code to safely detect country and language
 	tag, err := locale.Detect()
 	if err != nil {
@@ -93,55 +159,7 @@ func main() {
 	if !IsValidLanguageCode(lang) {
 		log.Fatalln("⚠️  Invalid language code. Please configure `plaid.language` (using an envvar, PLAID_LANGUAGE, or in oregano's config file) to a language that Plaid supports. Plaid supports the following languages: ", plaidSupportedLanguages)
 	}
-
-	// Load the plaid environment from the config
-	viper.SetDefault("plaid.environment", "sandbox")
-	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
-
-	var plaidEnv plaid.Environment
-	switch plaidEnvStr {
-	case "sandbox":
-		plaidEnv = plaid.Sandbox
-	case "development":
-		plaidEnv = plaid.Development
-	default:
-		log.Fatalln("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
-	}
-
-	// Build the plaid client using their library
-	opts := plaid.NewConfiguration()
-	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
-	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
-	opts.UseEnvironment(plaidEnv)
-	client := plaid.NewAPIClient(opts)
-
-	// Build a linker struct to run Plaid Link
-	linker := ocli.NewLinker(data, client, countries, lang)
-	port := viper.GetString("link.port")
-
-	// Attempt to run link in a browser window
-	var tokenPair *ocli.TokenPair
-	tokenPair, err = linker.Link(port)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("Institution linked!")
-	log.Printf("Item ID: %s\n", tokenPair.ItemID)
-
-	// If an alias already exists, print it
-	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
-		log.Printf("Alias: %s\n", alias)
-		return
-	}
-
-	// Store the long term access token from plaid
-	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
-	// err = data.Save()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	//-------
+	return countries, lang
 }
 
 // See https://plaid.com/docs/link/customization/#language-and-country
