@@ -27,17 +27,19 @@ func main() {
 	fmt.Println("Press Enter to try launching Link...")
 	reader.ReadString('\n')
 
+	// Establish where to store data as ~/.oregano/
 	usr, _ := user.Current()
 	dir := usr.HomeDir
 	viper.SetDefault("oregano.data_dir", filepath.Join(dir, ".oregano"))
 
+	// Load stored tokens and aliases
 	dataDir := viper.GetString("oregano.data_dir")
 	data, err := ocli.LoadData(dataDir)
-
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	// Load config.json, preferring the current directory, but if not check ~/.oregano
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
 	viper.AddConfigPath(dataDir)
@@ -51,10 +53,12 @@ func main() {
 		}
 	}
 
+	// Allow normal environment variables to be used in place of config.json
 	viper.SetEnvPrefix("")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	viper.AutomaticEnv()
 
+	// A whole bunch of code to safely detect country and language
 	tag, err := locale.Detect()
 	if err != nil {
 		tag = language.AmericanEnglish
@@ -90,6 +94,7 @@ func main() {
 		log.Fatalln("⚠️  Invalid language code. Please configure `plaid.language` (using an envvar, PLAID_LANGUAGE, or in oregano's config file) to a language that Plaid supports. Plaid supports the following languages: ", plaidSupportedLanguages)
 	}
 
+	// Load the plaid environment from the config
 	viper.SetDefault("plaid.environment", "sandbox")
 	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
 
@@ -103,34 +108,39 @@ func main() {
 		log.Fatalln("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
 	}
 
+	// Build the plaid client using their library
 	opts := plaid.NewConfiguration()
 	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
 	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
 	opts.UseEnvironment(plaidEnv)
-
 	client := plaid.NewAPIClient(opts)
 
+	// Build a linker struct to run Plaid Link
 	linker := ocli.NewLinker(data, client, countries, lang)
 	port := viper.GetString("link.port")
 
+	// Attempt to run link in a browser window
 	var tokenPair *ocli.TokenPair
-
 	tokenPair, err = linker.Link(port)
 	if err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("Institution linked!")
+	log.Printf("Item ID: %s\n", tokenPair.ItemID)
+
+	// If an alias already exists, print it
+	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
+		log.Printf("Alias: %s\n", alias)
+		return
+	}
+
+	// Store the long term access token from plaid
 	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
 	// err = data.Save()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("Institution linked!")
-	log.Println(fmt.Sprintf("Item ID: %s", tokenPair.ItemID))
 
-	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
-		log.Println(fmt.Sprintf("Alias: %s", alias))
-		return
-	}
 	//-------
 }
 

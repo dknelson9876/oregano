@@ -57,13 +57,13 @@ func (l *Linker) Link(port string) (*TokenPair, error) {
 	request.SetLinkCustomizationName("default")
 	// request.SetWebhook("https://webhook-uri.com")
 	// request.SetRedirectUri("https://your-domain.com/oauth-page.html")
-	resp, _, err := l.Client.PlaidApi.LinkTokenCreate(nil).LinkTokenCreateRequest(*request).Execute()
+	resp, _, _ := l.Client.PlaidApi.LinkTokenCreate(nil).LinkTokenCreateRequest(*request).Execute()
 
 	return l.link(port, resp.GetLinkToken())
 }
 
 func (l *Linker) link(port string, linkToken string) (*TokenPair, error) {
-	log.Println(fmt.Sprintf("Starting Plaid Link on port %s...", port))
+	log.Printf("Starting Plaid Link on port %s...\n", port)
 
 	go func() {
 		http.HandleFunc("/link", handleLink(l, linkToken))
@@ -74,7 +74,7 @@ func (l *Linker) link(port string, linkToken string) (*TokenPair, error) {
 	}()
 
 	url := fmt.Sprintf("http://localhost:%s/link", port)
-	log.Println(fmt.Sprintf("Your browser should open automatically. If it doesn't, please visit %s to continue linking!", url))
+	log.Printf("Your browser should open automatically. If it doesn't, please visit %s to continue linking!\n", url)
 	open.Run(url)
 
 	select {
