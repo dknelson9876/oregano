@@ -1,0 +1,14 @@
+{
+    "plaid": {
+        "client_id": "REPLACE_ME",
+        "secret": "REPLACE_ME",
+        "environment": "sandbox",
+        "language": "en",
+        "countries": [
+            "US"
+        ]
+    },
+    "link": {
+        "port": "8080"
+    }
+}
