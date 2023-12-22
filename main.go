@@ -91,7 +91,9 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				item("Home"),
 				item("Transactions"),
 			}
-			m.navList = list.New(items, itemDelegate{}, msg.Width/2, msg.Height-4)
+			// for some reason it overestimates the height by 4 rows
+			// so for now just manually fix it
+			m.navList = list.New(items, itemDelegate{}, msg.Width/4, msg.Height-2)
 			m.navList.SetShowTitle(false)
 			m.navList.SetShowHelp(false)
 			m.navList.SetShowFilter(false)
@@ -100,7 +102,12 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.content = NewHomeModel()
 			m.ready = true
 		} else {
-			m.navList.SetSize(msg.Width/4, msg.Height-4)
+			// here for compatibility with other builds that
+			// actually respond to window resizing, since win10/win11
+			// window resizing doesn't work. Hopefully the PR
+			// https://github.com/charmbracelet/bubbletea/pull/878
+			// gets accepted soon
+			m.navList.SetSize(msg.Width/4, msg.Height-2)
 		}
 	}
 
