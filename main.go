@@ -2,204 +2,157 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-const (
-	initialInputs = 2
-	maxInputs     = 6
-	minInputs     = 1
-	helpHeight    = 5
-)
-
+// Define styles
 var (
-	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-
-	cursorLineStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("57")).
-			Foreground(lipgloss.Color("230"))
-
-	placeholderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("238"))
-
-	endOfBufferStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("235"))
-
-	focusedPlaceholderStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("99"))
-
-	focusedBorderStyle = lipgloss.NewStyle().
+	borderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("238"))
+	focusedBorderStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("87"))
 
-	blurredBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.HiddenBorder())
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
 )
 
-type keymap = struct {
-	next, prev, add, remove, quit key.Binding
-}
+// Define list items
+type item string
 
-func newTextarea() textarea.Model {
-	t := textarea.New()
-	t.Prompt = ""
-	t.Placeholder = "Type something"
-	t.ShowLineNumbers = true
-	t.Cursor.Style = cursorStyle
-	t.FocusedStyle.Placeholder = focusedPlaceholderStyle
-	t.BlurredStyle.Placeholder = placeholderStyle
-	t.FocusedStyle.CursorLine = cursorLineStyle
-	t.FocusedStyle.Base = focusedBorderStyle
-	t.BlurredStyle.Base = blurredBorderStyle
-	t.FocusedStyle.EndOfBuffer = endOfBufferStyle
-	t.BlurredStyle.EndOfBuffer = endOfBufferStyle
-	t.KeyMap.DeleteWordBackward.SetEnabled(false)
-	t.KeyMap.LineNext = key.NewBinding(key.WithKeys("down"))
-	t.KeyMap.LinePrevious = key.NewBinding(key.WithKeys("up"))
-	t.Blur()
-	return t
-}
+// TODO find the purpose of FilterValue and itemDelegate for lists
+func (i item) FilterValue() string { return "" }
 
-type model struct {
-	width  int
-	height int
-	keymap keymap
-	help   help.Model
-	inputs []textarea.Model
-	focus  int
-}
+type itemDelegate struct{}
 
-func newModel() model {
-	m := model{
-		inputs: make([]textarea.Model, initialInputs),
-		help:   help.New(),
-		keymap: keymap{
-			next: key.NewBinding(
-				key.WithKeys("tab"),
-				key.WithHelp("tab", "next"),
-			),
-			prev: key.NewBinding(
-				key.WithKeys("shift+tab"),
-				key.WithHelp("shift+tab", "prev"),
-			),
-			add: key.NewBinding(
-				key.WithKeys("ctrl+n"),
-				key.WithHelp("ctrl+n", "add an editor"),
-			),
-			remove: key.NewBinding(
-				key.WithKeys("ctrl+w"),
-				key.WithHelp("ctrl+w", "remove an editor"),
-			),
-			quit: key.NewBinding(
-				key.WithKeys("esc", "ctrl+c"),
-				key.WithHelp("esc", "quit"),
-			),
-		},
+func (d itemDelegate) Height() int                             { return 1 }
+func (d itemDelegate) Spacing() int                            { return 0 }
+func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	i, ok := listItem.(item)
+	if !ok {
+		return
 	}
-	for i := 0; i < initialInputs; i++ {
-		m.inputs[i] = newTextarea()
+
+	str := fmt.Sprintf("%d. %s", index+1, i)
+
+	fn := itemStyle.Render
+	if index == m.Index() {
+		fn = func(s ...string) string {
+			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+		}
 	}
-	m.inputs[m.focus].Focus()
-	m.updateKeybindings()
-	return m
+
+	fmt.Fprint(w, fn(str))
 }
 
-func (m model) Init() tea.Cmd {
-	return textarea.Blink
+// Begin mainModel stuff
+type mainModel struct {
+	ready bool
+	// content  string
+	// viewport viewport.Model
+	navList   list.Model
+	content   tea.Model
+	focusList bool
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func newModel() mainModel {
+	return mainModel{
+		ready:     false,
+		focusList: true,
+	}
+}
+
+func (m mainModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, m.keymap.quit):
-			for i := range m.inputs {
-				m.inputs[i].Blur()
-			}
+		if k := msg.String(); k == "ctrl+c" || k == "q" || k == "esc" {
 			return m, tea.Quit
-		case key.Matches(msg, m.keymap.next):
-			m.inputs[m.focus].Blur()
-			m.focus++
-			if m.focus > len(m.inputs)-1 {
-				m.focus = 0
-			}
-			cmd := m.inputs[m.focus].Focus()
-			cmds = append(cmds, cmd)
-		case key.Matches(msg, m.keymap.prev):
-			m.inputs[m.focus].Blur()
-			m.focus--
-			if m.focus < 0 {
-				m.focus = len(m.inputs) - 1
-			}
-			cmd := m.inputs[m.focus].Focus()
-			cmds = append(cmds, cmd)
-		case key.Matches(msg, m.keymap.add):
-			m.inputs = append(m.inputs, newTextarea())
-		case key.Matches(msg, m.keymap.remove):
-			m.inputs = m.inputs[:len(m.inputs)-1]
-			if m.focus > len(m.inputs)-1 {
-				m.focus = len(m.inputs) - 1
-			}
+		} else if msg.String() == " " {
+			m.focusList = !m.focusList
 		}
 	case tea.WindowSizeMsg:
-		m.height = msg.Height
-		m.width = msg.Width
+		if !m.ready {
+			items := []list.Item{
+				item("Home"),
+				item("Transactions"),
+			}
+			m.navList = list.New(items, itemDelegate{}, msg.Width/2, msg.Height-4)
+			m.navList.SetShowTitle(false)
+			m.navList.SetShowHelp(false)
+			m.navList.SetShowFilter(false)
+			m.navList.SetFilteringEnabled(false)
+			m.navList.SetShowStatusBar(false)
+			m.content = NewHomeModel()
+			m.ready = true
+		} else {
+			m.navList.SetSize(msg.Width/4, msg.Height-4)
+		}
 	}
 
-	m.updateKeybindings()
-	m.sizeInputs()
-
-	// Update all textareas
-	for i := range m.inputs {
-		newModel, cmd := m.inputs[i].Update(msg)
-		m.inputs[i] = newModel
+	// m.viewport, cmd = m.viewport.Update(msg)
+	if m.focusList {
+		m.navList, cmd = m.navList.Update(msg)
+		cmds = append(cmds, cmd)
+	} else {
+		m.content, cmd = m.content.Update(msg)
 		cmds = append(cmds, cmd)
 	}
+
+	//TODO else send update to content
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m *model) sizeInputs() {
-	for i := range m.inputs {
-		m.inputs[i].SetWidth(m.width / len(m.inputs))
-		m.inputs[i].SetHeight(m.height - helpHeight)
+func (m mainModel) View() string {
+	if !m.ready {
+		return "\n Initializing...."
 	}
-}
+	// return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
+	var navListStr string
+	var contentStr string
+	if m.focusList {
+		navListStr = focusedBorderStyle.Render(m.navList.View())
+		contentStr = borderStyle.Render(m.content.View())
+	} else {
+		navListStr = borderStyle.Render(m.navList.View())
+		contentStr = focusedBorderStyle.Render(m.content.View())
+	}
 
-func (m *model) updateKeybindings() {
-	m.keymap.add.SetEnabled(len(m.inputs) < maxInputs)
-	m.keymap.remove.SetEnabled(len(m.inputs) > minInputs)
-}
-
-func (m model) View() string {
-	help := m.help.ShortHelpView([]key.Binding{
-		m.keymap.next,
-		m.keymap.prev,
-		m.keymap.add,
-		m.keymap.remove,
-		m.keymap.quit,
-	})
+	// navListStr = m.navList.View()
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		navListStr,
+		contentStr)
+	// return navListStr
 
 	//┌─┬─┬───┐
 	//│ │ │ C │
 	//│A│B├───┤
 	//│ │ │ D │
 	//└─┴─┴───┘
+	// a.height = height
+	// b.height = height
+	// c.height = height/2
+	// d.height = height/2
+	// a.width = width/4
+	// b.width = width/4
+	// c.widht = width/2
+	// d.width = width/2
 
-	var views []string
-	for i := range m.inputs {
-		views = append(views, m.inputs[i].View())
-	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, views...) + "\n\n" + help
 }
 
 func main() {
