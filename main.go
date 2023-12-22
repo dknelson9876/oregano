@@ -17,14 +17,14 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("238"))
 	contentBorderStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("238"))
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("238"))
 	listFocusedBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("87"))
 	contentFocusedBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("87"))
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("87"))
 
 	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
 	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
@@ -93,6 +93,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.String() == " " {
 			m.focusList = !m.focusList
 		}
+		if m.focusList {
+			m.navList, cmd = m.navList.Update(msg)
+			cmds = append(cmds, cmd)
+		} else {
+			// TODO: have the content return a unique command on being resized
+			//    inside itself
+			m.content, cmd = m.content.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	case tea.WindowSizeMsg:
 		if !m.ready {
 			items := []list.Item{
@@ -101,7 +110,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// for some reason it overestimates the height by 4 rows
 			// so for now just manually fix it
-			m.navList = list.New(items, itemDelegate{}, msg.Width/8, msg.Height-2)
+			m.navList = list.New(items, itemDelegate{}, msg.Width/8 - 2, msg.Height-2)
 			m.navList.SetShowTitle(false)
 			m.navList.SetShowHelp(false)
 			m.navList.SetShowFilter(false)
@@ -109,7 +118,7 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.navList.SetShowStatusBar(false)
 
 			m.content = NewHomeModel()
-			m.content.SetSize((msg.Width/8)*7, msg.Height-2)
+			m.content.SetSize((msg.Width/8)*7 - 2, msg.Height-2)
 
 			m.height = msg.Height - 2
 			m.width = msg.Width
@@ -120,19 +129,15 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// window resizing doesn't work. Hopefully the PR
 			// https://github.com/charmbracelet/bubbletea/pull/878
 			// gets accepted soon
-			m.navList.SetSize(msg.Width/8, msg.Height-2)
-			m.content.SetSize((msg.Width/8)*7, msg.Height-2)
+			m.navList.SetSize(msg.Width/8 - 2, msg.Height-2)
+			m.content.SetSize((msg.Width/8)*7 - 2, msg.Height-2)
 
 			m.height = msg.Height - 2
 			m.width = msg.Width
 		}
-	}
-
-	// m.viewport, cmd = m.viewport.Update(msg)
-	if m.focusList {
+		// Always update everything on window resize
 		m.navList, cmd = m.navList.Update(msg)
 		cmds = append(cmds, cmd)
-	} else {
 		m.content, cmd = m.content.Update(msg)
 		cmds = append(cmds, cmd)
 	}
@@ -150,10 +155,10 @@ func (m mainModel) View() string {
 	var navListStr string
 	var contentStr string
 	if m.focusList {
-		navListStr = listFocusedBorderStyle.Width(m.width / 8).Render(m.navList.View())
+		navListStr = listFocusedBorderStyle.Width(m.width / 8 - 2).Render(m.navList.View())
 		contentStr = contentBorderStyle.Render(m.content.View())
 	} else {
-		navListStr = listBorderStyle.Width(m.width / 8).Render(m.navList.View())
+		navListStr = listBorderStyle.Width(m.width / 8 - 2).Render(m.navList.View())
 		contentStr = contentFocusedBorderStyle.Render(m.content.View())
 	}
 

@@ -59,22 +59,22 @@ func (m *homeModel) SetSize(width, height int) {
 	m.sizeCounter++
 }
 
-// func verticalLine(count int) string {
-// 	return strings.Repeat("|", count)
-// }
+func verticalLine(count int) string {
+	return strings.TrimSpace(strings.Repeat("|\n", count))
+}
 
 func horizontalLine(count int) string {
 	return strings.Repeat("-", count)
 }
 
 func (m homeModel) View() string {
-	acctWidth := m.width / 3
+	acctWidth := m.width / 3 - 1 // -1 to accoutn for border line
 	budgetWidth := m.width - acctWidth
 	transWidth := budgetWidth
 
-	acctHeight := m.height
-	budgetHeight := m.height / 2
-	transHeight := m.height - budgetHeight
+	acctHeight := m.height - 3
+	budgetHeight := m.height / 2 - 3
+	transHeight := m.height - budgetHeight - 3 // -1 to account for border line
 
 	acctView := acctStyle.Width(acctWidth).Height(acctHeight).Render(fmt.Sprintf("//TODO accounts... sizeCount %d", m.sizeCounter))
 	budgetView := budgetStyle.Width(budgetWidth).Height(budgetHeight).Render(fmt.Sprintf("//TODO bugets... local width %d", m.width))
@@ -82,7 +82,7 @@ func (m homeModel) View() string {
 
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		acctView,
-		// verticalLine(acctHeight),
+		verticalLine(acctHeight),
 		lipgloss.JoinVertical(lipgloss.Left,
 			budgetView,
 			horizontalLine(budgetWidth),
