@@ -2,15 +2,18 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Xuanwo/go-locale"
 	"github.com/dknelson9876/oregano/ocli"
+	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
 	"golang.org/x/text/language"
@@ -30,13 +33,22 @@ func main() {
 	// Establish where to store data as ~/.oregano/
 	usr, _ := user.Current()
 	dir := usr.HomeDir
-	viper.SetDefault("oregano.data_dir", filepath.Join(dir, ".oregano"))
+	viper.SetDefault("oregano.data_dir", filepath.Join(dir, ".config", "oregano"))
 
 	// Load stored tokens and aliases
 	dataDir := viper.GetString("oregano.data_dir")
 	data, err := ocli.LoadData(dataDir)
 	if err != nil {
 		log.Fatal(err)
+	} else {
+		log.Println("Found links to institutions: ")
+		for itemID := range data.Tokens {
+			if alias, ok := data.Aliases[itemID]; ok {
+				log.Printf("-- %s\t(%s)\n", itemID, alias)
+			} else {
+				log.Printf("-- %s\n", itemID)
+			}
+		}
 	}
 
 	// Load config.json, preferring the current directory, but if not check ~/.oregano
@@ -92,35 +104,98 @@ func main() {
 	opts.UseEnvironment(plaidEnv)
 	client := plaid.NewAPIClient(opts)
 
-	// ----- Begin new item (account) specific things ----------
+	// ----- Begin Main Loop -----------------------------------
+	fmt.Println("Welcome to Oregano, the cli budget program")
+	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
+	for {
+		fmt.Print("oregano >>")
+		var input string
+		fmt.Scanln(&input)
 
+		switch input {
+		case "h", "help":
+			fmt.Println("oregano-cli - Terminal budgeting app" +
+				"Commands:\n" +
+				"* help\t[h]\tPrint this menu\n" +
+				"* quit\t[q]\tQuit oregano\n" +
+				"* link\t\tLink a new institution\n" +
+				"* list\t[ls]\tList linked institutions")
+		case "q", "quit":
+			fmt.Println("goodbye")
+			return
+		case "link":
+			linkNewInstitution(data, client, countries, lang)
+		case "list", "ls":
+			fmt.Println("Institutions:")
+			for itemID := range data.Tokens {
+				if alias, ok := data.Aliases[itemID]; ok {
+					log.Printf("-- %s\t(%s)\n", itemID, alias)
+				} else {
+					log.Printf("-- %s\n", itemID)
+				}
+			}
+		default:
+			fmt.Println("Unrecognized command. Type 'help' for valid commands")
+		}
+
+	}
+
+	//-------
+}
+
+func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []string, lang string) {
 	// Build a linker struct to run Plaid Link
 	linker := ocli.NewLinker(data, client, countries, lang)
 	port := viper.GetString("link.port")
 
 	// Attempt to run link in a browser window
 	var tokenPair *ocli.TokenPair
-	tokenPair, err = linker.Link(port)
+	tokenPair, err := linker.Link(port)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	log.Println("Institution linked!")
 	log.Printf("Item ID: %s\n", tokenPair.ItemID)
 
-	// If an alias already exists, print it
-	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
-		log.Printf("Alias: %s\n", alias)
-		return
-	}
-
 	// Store the long term access token from plaid
 	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
-	// err = data.Save()
+	err = data.Save()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	//-------
+	// If an alias already exists, print it
+	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
+		log.Printf("Existing Alias: %s\n", alias)
+		return
+	}
+
+	prompt := promptui.Prompt{
+		Label: "Provide an alias to use for this institution: (default: none)",
+		Validate: func(input string) error {
+			matched, err := regexp.Match(`^\w+$`, []byte(input))
+			if err != nil {
+				return err
+			}
+
+			if !matched && input != "" {
+				return errors.New("alias must contain only letters, numbers, or underscore")
+			}
+
+			return nil
+		},
+	}
+
+	input, err := prompt.Run()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if input != "" {
+		err = SetAlias(data, tokenPair.ItemID, input)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
 }
 
 func DetectRegion() ([]string, string) {
@@ -188,4 +263,21 @@ func sliceToMap(slice []string) map[string]bool {
 		set[s] = true
 	}
 	return set
+}
+
+func SetAlias(data *ocli.Data, itemID string, alias string) error {
+	if _, ok := data.Tokens[itemID]; !ok {
+		return errors.New(fmt.Sprintf("No access token found for item ID `%s`. Try linking again.", itemID))
+	}
+
+	data.Aliases[alias] = itemID
+	data.BackAliases[itemID] = alias
+	err := data.Save()
+	if err != nil {
+		return err
+	}
+
+	log.Println(fmt.Sprintf("Aliased %s to %s", itemID, alias))
+
+	return nil
 }
