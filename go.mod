@@ -4,6 +4,7 @@ go 1.21.5
 
 require (
 	github.com/Xuanwo/go-locale v1.1.0
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/manifoldco/promptui v0.9.0
 	github.com/plaid/plaid-go v1.10.0
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966

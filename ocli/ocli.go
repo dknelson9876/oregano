@@ -2,6 +2,7 @@ package ocli
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -84,7 +85,7 @@ func (d *Data) Save() error {
 	if err != nil {
 		return err
 	}
-	
+
 	err = d.SaveAliases()
 	if err != nil {
 		return err
@@ -102,7 +103,9 @@ func (d *Data) SaveAliases() error {
 }
 
 func save(v interface{}, filePath string) error {
-	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
+	// O_TRUNC to truncate to 0 bytes on open, in other words deleting
+	// the old file contents
+	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return nil
 	}
@@ -115,4 +118,22 @@ func save(v interface{}, filePath string) error {
 
 	_, err = f.Write(b)
 	return err
+}
+
+func (d *Data) RemoveToken(input string) error {
+	// Check if input was an alias
+	if token, ok := d.Aliases[input]; ok {
+		delete(d.Aliases, input)
+		delete(d.BackAliases, token)
+		delete(d.Tokens, token)
+		d.Save()
+		return nil
+	} else if alias, ok := d.BackAliases[input]; ok {
+		delete(d.Aliases, alias)
+		delete(d.BackAliases, input)
+		delete(d.Tokens, input)
+		d.Save()
+		return nil
+	}
+	return fmt.Errorf("input not recognized as valid token or alias: %s", input)
 }

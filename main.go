@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,16 +23,17 @@ import (
 func main() {
 	// disable some of the things that log prints by default
 	log.SetFlags(0)
+	// TODO: change log level based on command line flags
+	olog := ocli.NewOLogger(ocli.DebugDetail)
 
 	// Wait for new line to take real action
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Press Enter to try launching Link...")
-	reader.ReadString('\n')
+	// fmt.Println("Press Enter to try launching Link...")
+	// reader.ReadString('\n')
 
 	// Establish where to store data as ~/.oregano/
-	usr, _ := user.Current()
-	dir := usr.HomeDir
-	viper.SetDefault("oregano.data_dir", filepath.Join(dir, ".config", "oregano"))
+	dirname, _ := os.UserHomeDir()
+	viper.SetDefault("oregano.data_dir", filepath.Join(dirname, ".config", "oregano"))
 
 	// Load stored tokens and aliases
 	dataDir := viper.GetString("oregano.data_dir")
@@ -41,12 +41,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	} else {
-		log.Println("Found links to institutions: ")
+		olog.Println(ocli.Debug, "Found links to institutions: ")
 		for itemID := range data.Tokens {
-			if alias, ok := data.Aliases[itemID]; ok {
-				log.Printf("-- %s\t(%s)\n", itemID, alias)
+			if alias, ok := data.BackAliases[itemID]; ok {
+				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", itemID, alias)
 			} else {
-				log.Printf("-- %s\n", itemID)
+				olog.Printf(ocli.Debug, "-- %s\n", itemID)
 			}
 		}
 	}
@@ -108,34 +108,50 @@ func main() {
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
 	for {
-		fmt.Print("oregano >>")
-		var input string
-		fmt.Scanln(&input)
+		fmt.Print("\x1B[32moregano >> \x1B[0m")
+		var line string
+		// fmt.Scanln(&line)
+		line, err = reader.ReadString('\n')
+		// tokens, err := shlex.Split(line)
+		tokens := strings.Fields(line)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
 
-		switch input {
+		olog.Print(ocli.DebugDetail, tokens)
+		switch tokens[0] {
 		case "h", "help":
-			fmt.Println("oregano-cli - Terminal budgeting app" +
+			log.Println("oregano-cli - Terminal budgeting app" +
 				"Commands:\n" +
 				"* help\t[h]\tPrint this menu\n" +
 				"* quit\t[q]\tQuit oregano\n" +
 				"* link\t\tLink a new institution\n" +
 				"* list\t[ls]\tList linked institutions")
 		case "q", "quit":
-			fmt.Println("goodbye")
+			log.Println("goodbye")
 			return
 		case "link":
 			linkNewInstitution(data, client, countries, lang)
 		case "list", "ls":
-			fmt.Println("Institutions:")
+			log.Println("Institutions:")
 			for itemID := range data.Tokens {
-				if alias, ok := data.Aliases[itemID]; ok {
+				if alias, ok := data.BackAliases[itemID]; ok {
 					log.Printf("-- %s\t(%s)\n", itemID, alias)
 				} else {
 					log.Printf("-- %s\n", itemID)
 				}
 			}
+		case "remove", "rm":
+			for _, input := range tokens[1:] {
+				log.Printf("Removing institution %s\n", input)
+				err = data.RemoveToken(input)
+				if err != nil {
+					log.Println(err)
+				}
+			}
 		default:
-			fmt.Println("Unrecognized command. Type 'help' for valid commands")
+			log.Println("Unrecognized command. Type 'help' for valid commands")
 		}
 
 	}
@@ -267,7 +283,7 @@ func sliceToMap(slice []string) map[string]bool {
 
 func SetAlias(data *ocli.Data, itemID string, alias string) error {
 	if _, ok := data.Tokens[itemID]; !ok {
-		return errors.New(fmt.Sprintf("No access token found for item ID `%s`. Try linking again.", itemID))
+		return fmt.Errorf("no access token found for item ID `%s`. Try linking again", itemID)
 	}
 
 	data.Aliases[alias] = itemID
@@ -277,7 +293,7 @@ func SetAlias(data *ocli.Data, itemID string, alias string) error {
 		return err
 	}
 
-	log.Println(fmt.Sprintf("Aliased %s to %s", itemID, alias))
+	log.Printf("Aliased %s to %s\n", itemID, alias)
 
 	return nil
 }
