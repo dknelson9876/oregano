@@ -1,6 +1,7 @@
 package ocli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -27,6 +28,10 @@ type TokenPair struct {
 	AccessToken string
 }
 
+var ctxShutdown, cancel = context.WithCancel(context.Background())
+
+var linkUsed = false
+
 func NewLinker(data *Data, client *plaid.APIClient, countries []string, lang string) *Linker {
 	return &Linker{
 		Results:       make(chan string),
@@ -40,6 +45,9 @@ func NewLinker(data *Data, client *plaid.APIClient, countries []string, lang str
 }
 
 func (l *Linker) Link(port string) (*TokenPair, error) {
+	if linkUsed {
+		return nil, errors.New("please relaunch oregano to use link again")
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
@@ -64,10 +72,12 @@ func (l *Linker) Link(port string) (*TokenPair, error) {
 
 func (l *Linker) link(port string, linkToken string) (*TokenPair, error) {
 	log.Printf("Starting Plaid Link on port %s...\n", port)
+	srv := &http.Server{Addr: fmt.Sprintf(":%s", port)}
 
 	go func() {
+		linkUsed = true
 		http.HandleFunc("/link", handleLink(l, linkToken))
-		err := http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
+		err := srv.ListenAndServe()
 		if err != nil {
 			l.Errors <- err
 		}
@@ -76,6 +86,14 @@ func (l *Linker) link(port string, linkToken string) (*TokenPair, error) {
 	url := fmt.Sprintf("http://localhost:%s/link", port)
 	log.Printf("Your browser should open automatically. If it doesn't, please visit %s to continue linking!\n", url)
 	open.Run(url)
+
+	defer func() {
+		cancel()
+		err := srv.Shutdown(context.Background())
+		if err != nil {
+			log.Println("srv shutdown failed: ", err)
+		}
+	}()
 
 	select {
 	case err := <-l.Errors:
@@ -106,6 +124,12 @@ func (l *Linker) exchange(publicToken string) (plaid.ItemPublicTokenExchangeResp
 
 func handleLink(linker *Linker, linkToken string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-ctxShutdown.Done():
+			fmt.Println("shutting down...")
+			return
+		default:
+		}
 		switch r.Method {
 		case http.MethodGet:
 			t := template.New("link")
