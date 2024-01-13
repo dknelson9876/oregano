@@ -122,10 +122,10 @@ func save(v interface{}, filePath string) error {
 
 func (d *Data) RemoveToken(input string) error {
 	// Check if input was an alias
-	if token, ok := d.Aliases[input]; ok {
+	if id, ok := d.Aliases[input]; ok {
 		delete(d.Aliases, input)
-		delete(d.BackAliases, token)
-		delete(d.Tokens, token)
+		delete(d.BackAliases, id)
+		delete(d.Tokens, id)
 		d.Save()
 		return nil
 	} else if alias, ok := d.BackAliases[input]; ok {
@@ -135,5 +135,22 @@ func (d *Data) RemoveToken(input string) error {
 		d.Save()
 		return nil
 	}
-	return fmt.Errorf("input not recognized as valid token or alias: %s", input)
+	return fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
+}
+
+func (d *Data) SetAlias(itemID string, alias string) error {
+	if _, ok := d.Tokens[itemID]; !ok {
+		return fmt.Errorf("item ID `%s` not recognized", itemID)
+	}
+
+	d.Aliases[alias] = itemID
+	d.BackAliases[itemID] = alias
+	err := d.Save()
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Aliased %s to %s\n", itemID, alias)
+
+	return nil
 }

@@ -142,6 +142,16 @@ func main() {
 					log.Printf("-- %s\n", itemID)
 				}
 			}
+		case "alias":
+			if len(tokens) != 3 {
+				log.Println("Error: alias requires exactly 2 arguments")
+				log.Println("Usage: alias [token] [alias]")
+			} else {
+				err = data.SetAlias(tokens[1], tokens[2])
+				if err != nil {
+					log.Printf("Error: %s\n", err)
+				}
+			}
 		case "remove", "rm":
 			for _, input := range tokens[1:] {
 				log.Printf("Removing institution %s\n", input)
@@ -207,7 +217,7 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 		log.Fatalln(err)
 	}
 	if input != "" {
-		err = SetAlias(data, tokenPair.ItemID, input)
+		err = data.SetAlias(tokenPair.ItemID, input)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -281,19 +291,3 @@ func sliceToMap(slice []string) map[string]bool {
 	return set
 }
 
-func SetAlias(data *ocli.Data, itemID string, alias string) error {
-	if _, ok := data.Tokens[itemID]; !ok {
-		return fmt.Errorf("no access token found for item ID `%s`. Try linking again", itemID)
-	}
-
-	data.Aliases[alias] = itemID
-	data.BackAliases[itemID] = alias
-	err := data.Save()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Aliased %s to %s\n", itemID, alias)
-
-	return nil
-}
