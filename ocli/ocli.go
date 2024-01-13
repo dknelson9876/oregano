@@ -11,9 +11,9 @@ import (
 
 type Data struct {
 	DataDir     string
-	Tokens      map[string]string
-	Aliases     map[string]string
-	BackAliases map[string]string
+	Tokens      map[string]string // item id -> access token
+	Aliases     map[string]string // alias -> item id
+	BackAliases map[string]string // item id -> alias
 }
 
 func LoadData(dataDir string) (*Data, error) {
@@ -118,6 +118,16 @@ func save(v interface{}, filePath string) error {
 
 	_, err = f.Write(b)
 	return err
+}
+
+func (d *Data) GetAccessToken(input string) (string, error) {
+	if id, ok := d.Aliases[input]; ok {
+		return d.Tokens[id], nil
+	} else if token, ok := d.Tokens[input]; ok {
+		return token, nil
+	} else {
+		return "", fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
+	}
 }
 
 func (d *Data) RemoveToken(input string) error {

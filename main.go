@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -16,8 +17,6 @@ import (
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
 	"golang.org/x/text/language"
-	// ui "github.com/gizak/termui/v3"
-	// "github.com/gizak/termui/v3/widgets"
 )
 
 func main() {
@@ -25,6 +24,7 @@ func main() {
 	log.SetFlags(0)
 	// TODO: change log level based on command line flags
 	olog := ocli.NewOLogger(ocli.DebugDetail)
+	oview := ocli.NewOViewPlain(false)
 
 	// Wait for new line to take real action
 	reader := bufio.NewReader(os.Stdin)
@@ -103,6 +103,7 @@ func main() {
 	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
 	opts.UseEnvironment(plaidEnv)
 	client := plaid.NewAPIClient(opts)
+	ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
 	fmt.Println("Welcome to Oregano, the cli budget program")
@@ -124,12 +125,13 @@ func main() {
 		case "h", "help":
 			log.Println("oregano-cli - Terminal budgeting app" +
 				"Commands:\n" +
-				"* help\t[h]\tPrint this menu\n" +
-				"* quit\t[q]\tQuit oregano\n" +
-				"* link\t\tLink a new institution\n" +
-				"* list\t[ls]\tList linked institutions")
+				"* help (h)\t\tPrint this menu\n" +
+				"* quit (q)\t\tQuit oregano\n" +
+				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
+				"* list (ls)\t\tList linked institutions\n" +
+				"* remove (rm) [alias/id...]\tRemove a linked institution\n" + 
+				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]")
 		case "q", "quit":
-			log.Println("goodbye")
 			return
 		case "link":
 			linkNewInstitution(data, client, countries, lang)
@@ -159,6 +161,22 @@ func main() {
 				if err != nil {
 					log.Println(err)
 				}
+			}
+		case "accounts", "acc":
+			for _, input := range tokens[1:] {
+				token, err := data.GetAccessToken(input)
+				if err != nil {
+					log.Printf("Error: %s\n", err)
+					continue
+				}
+				resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
+					*plaid.NewAccountsGetRequest(token),
+				).Execute()
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				oview.ShowAccounts(resp.GetAccounts())
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
