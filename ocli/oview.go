@@ -5,13 +5,14 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/plaid/plaid-go/plaid"
-	// "github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 // Define styles
 var (
 	faintStyle = lipgloss.NewStyle().Faint(true)
 	// boldStyle  = lipgloss.NewStyle().Bold(true)
+	rightAlignStyle = lipgloss.NewStyle().Align(lipgloss.Right)
 )
 
 type OView interface {
@@ -53,7 +54,44 @@ func (v *OViewPlain) ShowAccount(account plaid.AccountBase) {
 }
 
 func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
-	for _, a := range accounts {
-		v.ShowAccount(a)
+	var rows [][]string
+	for _, acc := range accounts {
+		var thisRow []string
+		thisRow = append(thisRow, acc.GetName())
+
+		if off_name := acc.OfficialName.Get(); off_name != nil {
+			thisRow = append(thisRow, faintStyle.Render(*off_name))
+		} else {
+			thisRow = append(thisRow, "")
+		}
+
+		if current := acc.Balances.Current.Get(); current != nil {
+			thisRow = append(thisRow, fmt.Sprintf("$%.2f", *current))
+		} else {
+			thisRow = append(thisRow, "")
+		}
+
+		if available := acc.Balances.Available.Get(); available != nil {
+			thisRow = append(thisRow, fmt.Sprintf("$%.2f", *available))
+		} else {
+			thisRow = append(thisRow, "")
+		}
+
+		rows = append(rows, thisRow)
 	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if (col > 1) {
+				return rightAlignStyle
+			} else {
+				return lipgloss.NewStyle()
+			}
+		}).
+		Headers("NAME", "FULL NAME", "BALANCE", "AVAILABLE").
+		Rows(rows...)
+
+	fmt.Println(t)
 }
