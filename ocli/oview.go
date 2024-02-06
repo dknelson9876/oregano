@@ -18,6 +18,7 @@ var (
 type OView interface {
 	ShowAccount(account plaid.AccountBase)
 	ShowAccounts(accounts []plaid.AccountBase)
+	ShowTransaction(transaction plaid.Transaction)
 }
 
 type OViewPlain struct {
@@ -94,4 +95,8 @@ func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
 		Rows(rows...)
 
 	fmt.Println(t)
+}
+
+func (v *OViewPlain) ShowTransaction(t plaid.Transaction) {
+
 }

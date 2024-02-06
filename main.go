@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/Xuanwo/go-locale"
@@ -129,8 +130,10 @@ func main() {
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
 				"* list (ls)\t\tList linked institutions\n" +
-				"* remove (rm) [alias/id...]\tRemove a linked institution\n" + 
-				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]")
+				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
+				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]" +
+				"* accounts (acc) [alias/id...]\tShow account information for the institution under [alias]" +
+				"* transactions (trsn) [args]\tFetch transactions for [account]")
 		case "q", "quit":
 			return
 		case "link":
@@ -178,6 +181,13 @@ func main() {
 				}
 				oview.ShowAccounts(resp.GetAccounts())
 			}
+		case "transactions", "trsn":
+			token, err := data.GetAccessToken(tokens[1])
+			if err != nil {
+				log.Printf("Error: %s\n", err)
+				continue
+			}
+			showTransactions(client, token)
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
 		}
@@ -281,6 +291,68 @@ func DetectRegion() ([]string, string) {
 	return countries, lang
 }
 
+func showTransactions(client *plaid.APIClient, token string) error {
+	ctx := context.Background()
+
+	// Set cursor to empty to receive all historical updates
+	var cursor *string
+
+	// New transaction updates since "cursor"
+	var added []plaid.Transaction
+	var modified []plaid.Transaction
+	var removed []plaid.RemovedTransaction
+	hasMore := true
+	// Iterate through each page until no mroe pages
+	for hasMore {
+		request := plaid.NewTransactionsSyncRequest(token)
+		if cursor != nil {
+			request.SetCursor(*cursor)
+		}
+		resp, _, err := client.PlaidApi.TransactionsSync(
+			ctx,
+		).TransactionsSyncRequest(*request).Execute()
+		if err != nil {
+			return err
+		}
+
+		added = append(added, resp.GetAdded()...)
+		modified = append(modified, resp.GetModified()...)
+		removed = append(removed, resp.GetRemoved()...)
+		hasMore = resp.GetHasMore()
+		nextCursor := resp.GetNextCursor()
+		cursor = &nextCursor
+
+		// data, _ := added[len(added)-1].MarshalJSON()
+		// fmt.Println(string(data))
+	}
+
+	sort.Slice(added, func(i, j int) bool {
+		return added[i].GetDate() < added[j].GetDate()
+	})
+	latestTransactions := added[len(added)-9:]
+
+	// fmt.Println(latestTransactions.)
+	for _, t := range latestTransactions {
+		// fmt.Println(t.MarshalJSON())
+		showTransaction(t)
+	}
+
+	return nil
+}
+
+func showTransaction(t plaid.Transaction) {
+	fmt.Print("-- ")
+
+	fmt.Printf("(%s) ", t.Date)
+	fmt.Printf("%s - ", t.AccountId)
+	fmt.Printf("$%.2f / ", t.Amount)
+	fmt.Printf("%s - ", t.Name)
+	fmt.Println()
+
+
+	// fmt.Printf("\t\t%s\n", t.Location.)
+}
+
 // See https://plaid.com/docs/link/customization/#language-and-country
 var plaidSupportedCountries = []string{"US", "CA", "GB", "IE", "ES", "FR", "NL"}
 var plaidSupportedLanguages = []string{"en", "fr", "es", "nl"}
@@ -308,4 +380,3 @@ func sliceToMap(slice []string) map[string]bool {
 	}
 	return set
 }
-

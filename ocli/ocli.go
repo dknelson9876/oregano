@@ -14,6 +14,7 @@ type Data struct {
 	Tokens      map[string]string // item id -> access token
 	Aliases     map[string]string // alias -> item id
 	BackAliases map[string]string // item id -> alias
+	
 }
 
 func LoadData(dataDir string) (*Data, error) {
