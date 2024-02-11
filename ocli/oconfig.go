@@ -2,66 +2,39 @@ package ocli
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/dknelson9876/oregano/omoney"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 )
 
-type Data struct {
-	DataDir     string
-	Tokens      map[string]string // item id -> access token
-	Aliases     map[string]string // alias -> item id
-	BackAliases map[string]string // item id -> alias
-}
+// type Data struct {
+// 	DataDir     string
+// 	Tokens      map[string]string // item id -> access token
+// 	Aliases     map[string]string // alias -> item id
+// 	BackAliases map[string]string // item id -> alias
+// }
 
-func LoadData(dataDir string) (*Data, error) {
+func LoadModel(dataDir string) (*omoney.Model, error) {
 	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
 
-	data := &Data{
-		DataDir:     dataDir,
-		BackAliases: make(map[string]string),
+	model := &omoney.Model{
+		FilePath: filepath.Join(dataDir, "data", "accounts.json"),
+		Accounts: make(map[string]omoney.Account),
+		Aliases:  make(map[string]string),
 	}
 
-	data.loadTokens()
-	data.loadAliases()
-
-	return data, nil
-}
-
-func (d *Data) loadTokens() {
-	var tokens map[string]string = make(map[string]string)
-	filePath := d.tokensPath()
-	err := load(filePath, &tokens)
+	err := load(model.FilePath, &model.Accounts)
 	if err != nil {
-		log.Printf("Error loading tokens from %s. Assuming empty tokens. Error: %s", d.tokensPath(), err)
+		log.Printf("Error loading data from %s. Proceeding with no account data. Error: %s", model.FilePath, err)
+	} else {
+		for id, account := range model.Accounts {
+			model.Aliases[account.Alias] = id
+		}
 	}
 
-	d.Tokens = tokens
-}
-
-func (d *Data) tokensPath() string {
-	return filepath.Join(d.DataDir, "data", "tokens.json")
-}
-
-func (d *Data) loadAliases() {
-	var aliases map[string]string = make(map[string]string)
-	filePath := d.aliasesPath()
-	err := load(filePath, &aliases)
-	if err != nil {
-		log.Printf("Error loading aliases from %s. Assuming empty tokens. Error: %s", d.aliasesPath(), err)
-	}
-
-	d.Aliases = aliases
-
-	for alias, itemID := range aliases {
-		d.BackAliases[itemID] = alias
-	}
-}
-
-func (d *Data) aliasesPath() string {
-	return filepath.Join(d.DataDir, "data", "aliases.json")
+	return model, nil
 }
 
 func load(filePath string, v interface{}) error {
@@ -80,26 +53,8 @@ func load(filePath string, v interface{}) error {
 	}
 }
 
-func (d *Data) Save() error {
-	err := d.SaveTokens()
-	if err != nil {
-		return err
-	}
-
-	err = d.SaveAliases()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (d *Data) SaveTokens() error {
-	return save(d.Tokens, d.tokensPath())
-}
-
-func (d *Data) SaveAliases() error {
-	return save(d.Aliases, d.aliasesPath())
+func Save(model *omoney.Model) error {
+	return save(model.Accounts, model.FilePath)
 }
 
 func save(v interface{}, filePath string) error {
@@ -118,49 +73,4 @@ func save(v interface{}, filePath string) error {
 
 	_, err = f.Write(b)
 	return err
-}
-
-func (d *Data) GetAccessToken(input string) (string, error) {
-	if id, ok := d.Aliases[input]; ok {
-		return d.Tokens[id], nil
-	} else if token, ok := d.Tokens[input]; ok {
-		return token, nil
-	} else {
-		return "", fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
-	}
-}
-
-func (d *Data) RemoveToken(input string) error {
-	// Check if input was an alias
-	if id, ok := d.Aliases[input]; ok {
-		delete(d.Aliases, input)
-		delete(d.BackAliases, id)
-		delete(d.Tokens, id)
-		d.Save()
-		return nil
-	} else if alias, ok := d.BackAliases[input]; ok {
-		delete(d.Aliases, alias)
-		delete(d.BackAliases, input)
-		delete(d.Tokens, input)
-		d.Save()
-		return nil
-	}
-	return fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
-}
-
-func (d *Data) SetAlias(itemID string, alias string) error {
-	if _, ok := d.Tokens[itemID]; !ok {
-		return fmt.Errorf("item ID `%s` not recognized", itemID)
-	}
-
-	d.Aliases[alias] = itemID
-	d.BackAliases[itemID] = alias
-	err := d.Save()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Aliased %s to %s\n", itemID, alias)
-
-	return nil
 }

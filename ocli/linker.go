@@ -18,7 +18,6 @@ type Linker struct {
 	RelinkResults chan bool
 	Errors        chan error
 	Client        *plaid.APIClient
-	Data          *Data
 	countries     []string
 	lang          string
 }
@@ -32,13 +31,12 @@ var ctxShutdown, cancel = context.WithCancel(context.Background())
 
 var linkUsed = false
 
-func NewLinker(data *Data, client *plaid.APIClient, countries []string, lang string) *Linker {
+func NewLinker(client *plaid.APIClient, countries []string, lang string) *Linker {
 	return &Linker{
 		Results:       make(chan string),
 		RelinkResults: make(chan bool),
 		Errors:        make(chan error),
 		Client:        client,
-		Data:          data,
 		countries:     countries,
 		lang:          lang,
 	}

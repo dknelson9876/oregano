@@ -13,6 +13,7 @@ import (
 
 	"github.com/Xuanwo/go-locale"
 	"github.com/dknelson9876/oregano/ocli"
+	"github.com/dknelson9876/oregano/omoney"
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
@@ -37,16 +38,16 @@ func main() {
 
 	// Load stored tokens and aliases
 	dataDir := viper.GetString("oregano.data_dir")
-	data, err := ocli.LoadData(dataDir)
+	model, err := ocli.LoadModel(dataDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {
 		olog.Println(ocli.Debug, "Found links to institutions: ")
-		for itemID := range data.Tokens {
-			if alias, ok := data.BackAliases[itemID]; ok {
-				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", itemID, alias)
+		for id, acc := range model.Accounts {
+			if acc.Alias != "" {
+				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", id, acc.Alias)
 			} else {
-				olog.Printf(ocli.Debug, "-- %s\n", itemID)
+				olog.Printf(ocli.Debug, "-- %s\n", id)
 			}
 		}
 	}
@@ -129,19 +130,20 @@ func main() {
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
 				"* list (ls)\t\tList linked institutions\n" +
-				"* remove (rm) [alias/id...]\tRemove a linked institution\n" + 
-				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]")
+				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
+				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]\n" +
+				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
 		case "link":
-			linkNewInstitution(data, client, countries, lang)
+			linkNewInstitution(model, client, countries, lang)
 		case "list", "ls":
 			log.Println("Institutions:")
-			for itemID := range data.Tokens {
-				if alias, ok := data.BackAliases[itemID]; ok {
-					log.Printf("-- %s\t(%s)\n", itemID, alias)
+			for id, acc := range model.Accounts {
+				if acc.Alias != "" {
+					log.Printf("-- %s\t(%s)\n", id, acc.Alias)
 				} else {
-					log.Printf("-- %s\n", itemID)
+					log.Printf("-- %s\n", id)
 				}
 			}
 		case "alias":
@@ -149,22 +151,26 @@ func main() {
 				log.Println("Error: alias requires exactly 2 arguments")
 				log.Println("Usage: alias [token] [alias]")
 			} else {
-				err = data.SetAlias(tokens[1], tokens[2])
+				err = model.SetAlias(tokens[1], tokens[2])
 				if err != nil {
 					log.Printf("Error: %s\n", err)
+				} else {
+					ocli.Save(model)
 				}
 			}
 		case "remove", "rm":
 			for _, input := range tokens[1:] {
 				log.Printf("Removing institution %s\n", input)
-				err = data.RemoveToken(input)
+				err = model.RemoveAcount(input)
 				if err != nil {
 					log.Println(err)
+				} else {
+					ocli.Save(model)
 				}
 			}
 		case "accounts", "acc":
 			for _, input := range tokens[1:] {
-				token, err := data.GetAccessToken(input)
+				token, err := model.GetAccessToken(input)
 				if err != nil {
 					log.Printf("Error: %s\n", err)
 					continue
@@ -178,6 +184,15 @@ func main() {
 				}
 				oview.ShowAccounts(resp.GetAccounts())
 			}
+		case "new":
+			if len(tokens) < 2 {
+				log.Printf("Error: command 'new' requires more arguments\n")
+				continue
+			}
+			switch tokens[1] {
+			case "account", "acc":
+
+			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
 		}
@@ -187,9 +202,9 @@ func main() {
 	//-------
 }
 
-func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []string, lang string) {
+func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries []string, lang string) {
 	// Build a linker struct to run Plaid Link
-	linker := ocli.NewLinker(data, client, countries, lang)
+	linker := ocli.NewLinker(client, countries, lang)
 	port := viper.GetString("link.port")
 
 	// Attempt to run link in a browser window
@@ -201,18 +216,14 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 	log.Println("Institution linked!")
 	log.Printf("Item ID: %s\n", tokenPair.ItemID)
 
-	// Store the long term access token from plaid
-	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
-	err = data.Save()
-	if err != nil {
-		log.Fatalln(err)
+	acc := &omoney.Account{
+		Id:         tokenPair.ItemID,
+		PlaidToken: tokenPair.AccessToken,
+		Transactions: make([]omoney.Transaction, 0),
+		//TODO: AccountType
 	}
 
-	// If an alias already exists, print it
-	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
-		log.Printf("Existing Alias: %s\n", alias)
-		return
-	}
+	log.Printf("Default alias in struct: %s\n", acc.Alias)
 
 	prompt := promptui.Prompt{
 		Label: "Provide an alias to use for this institution: (default: none)",
@@ -226,6 +237,9 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 				return errors.New("alias must contain only letters, numbers, or underscore")
 			}
 
+			if _, ok := model.Aliases[input]; ok {
+				return errors.New("that alias is already in use")
+			}
 			return nil
 		},
 	}
@@ -235,11 +249,16 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 		log.Fatalln(err)
 	}
 	if input != "" {
-		err = data.SetAlias(tokenPair.ItemID, input)
-		if err != nil {
-			log.Fatalln(err)
-		}
+		acc.Alias = input
 	}
+
+	// Store the long term access token from plaid
+	model.AddAccount(*acc)
+	err = ocli.Save(model)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 }
 
 func DetectRegion() ([]string, string) {
@@ -308,4 +327,3 @@ func sliceToMap(slice []string) map[string]bool {
 	}
 	return set
 }
-
