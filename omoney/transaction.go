@@ -1,8 +1,8 @@
 package omoney
 
 import (
-	"time"
 	"github.com/google/uuid"
+	"time"
 )
 
 type Transaction struct {
@@ -15,7 +15,7 @@ type Transaction struct {
 	Description string
 }
 
-func (t *Transaction) New(date time.Time, amount float64, account string,
+func NewTransaction(date time.Time, amount float64, account string,
 	payee string, category string, description string) Transaction {
 	return Transaction{
 		UUID:        uuid.New().String(),
@@ -26,4 +26,15 @@ func (t *Transaction) New(date time.Time, amount float64, account string,
 		Category:    category,
 		Description: description,
 	}
+}
+
+// Returns whether or not all fields, excepting uuid, match
+func (t *Transaction) LooseEquals(other *Transaction) bool {
+	//TODO: do more research on comparing dates
+	return t.Date.Equal(other.Date) &&
+		t.Amount == other.Amount &&
+		t.Account == other.Account &&
+		t.Payee == other.Payee &&
+		t.Category == other.Category &&
+		t.Description == other.Description
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/Xuanwo/go-locale"
 	"github.com/dknelson9876/oregano/ocli"
 	"github.com/dknelson9876/oregano/omoney"
+	"github.com/google/shlex"
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
@@ -210,6 +211,10 @@ func main() {
 				if err != nil {
 					log.Fatalln(err)
 				}
+			case "transaction", "tr":
+				//TODO: check that account exists
+				str, _ := shlex.Split(strings.Join(tokens[2:], " "))
+				tr := ocli.CreateManualTransaction(str)
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
