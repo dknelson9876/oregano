@@ -124,6 +124,15 @@ func main() {
 		olog.Print(ocli.DebugDetail, tokens)
 		switch tokens[0] {
 		case "h", "help":
+			if len(tokens) == 2 {
+				switch tokens[1] {
+				case "new":
+					log.Println("new - manually create account or transaction\n" +
+						"* new account [alias] [type]\t\tcreate a new manual account\n" +
+						"* new transaction []...\t\t TODO")
+					continue
+				}
+			}
 			log.Println("oregano-cli - Terminal budgeting app" +
 				"Commands:\n" +
 				"* help (h)\t\tPrint this menu\n" +
@@ -141,7 +150,7 @@ func main() {
 			log.Println("Institutions:")
 			for id, acc := range model.Accounts {
 				if acc.Alias != "" {
-					log.Printf("-- %s\t(%s)\n", id, acc.Alias)
+					log.Printf("-- %s\t(%s)\n", acc.Alias, id)
 				} else {
 					log.Printf("-- %s\n", id)
 				}
@@ -191,7 +200,16 @@ func main() {
 			}
 			switch tokens[1] {
 			case "account", "acc":
-
+				acc := ocli.CreateManualAccount(tokens[2:])
+				if acc == nil {
+					log.Println("Error making new manual account")
+					continue
+				}
+				model.AddAccount(*acc)
+				err = ocli.Save(model)
+				if err != nil {
+					log.Fatalln(err)
+				}
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
@@ -217,8 +235,8 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 	log.Printf("Item ID: %s\n", tokenPair.ItemID)
 
 	acc := &omoney.Account{
-		Id:         tokenPair.ItemID,
-		PlaidToken: tokenPair.AccessToken,
+		Id:           tokenPair.ItemID,
+		PlaidToken:   tokenPair.AccessToken,
 		Transactions: make([]omoney.Transaction, 0),
 		//TODO: AccountType
 	}
