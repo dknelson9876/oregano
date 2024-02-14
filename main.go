@@ -194,6 +194,14 @@ func main() {
 				}
 				oview.ShowAccounts(resp.GetAccounts())
 			}
+
+		case "transactions", "trs":
+			acc, err := model.GetAccount(tokens[1])
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			ocli.ShowTransactions(acc)
 		case "new":
 			if len(tokens) < 2 {
 				log.Printf("Error: command 'new' requires more arguments\n")
@@ -212,9 +220,34 @@ func main() {
 					log.Fatalln(err)
 				}
 			case "transaction", "tr":
-				//TODO: check that account exists
+				// new tr [acc] [payee] [amount] (date) (cat)
+				//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
+				if len(tokens) < 3 {
+					log.Printf("Error: command 'new transaction' requires more arguments\n")
+					log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
+					continue
+				}
+				if !model.IsValidAccount(tokens[2]) {
+					log.Printf("Error: %s\n", err)
+					continue
+				}
+
 				str, _ := shlex.Split(strings.Join(tokens[2:], " "))
 				tr := ocli.CreateManualTransaction(str)
+				if tr == nil {
+					log.Println("Error making new manual transaction")
+					continue
+				}
+
+				// transaction is purposely handled by model and not
+				// account because I intend to later add an always
+				// up to date budget model
+				model.AddTransaction(*tr)
+				log.Printf("Saving new transaction %+v\n", tr)
+				err = ocli.Save(model)
+				if err != nil {
+					log.Fatalln(err)
+				}
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")

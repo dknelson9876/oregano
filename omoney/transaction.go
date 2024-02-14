@@ -12,7 +12,7 @@ type Transaction struct {
 	// this application. Required field.
 	UUID string
 	// The account belonging to the user which the money
-	// is being pulled from. Required field.
+	// is being pulled from. Required field. Assumed to be a valid alias
 	Account string
 	// The 'account' which money is being sent to, typically
 	// a business. Required field.

@@ -110,3 +110,16 @@ func CreateManualTransaction(input []string) *omoney.Transaction {
 		omoney.WithCategory(cat),
 		omoney.WithDescription(desc))
 }
+
+func ShowTransactions(acc omoney.Account) {
+	var sl []omoney.Transaction
+	if len(acc.Transactions) > 10 {
+		sl = acc.Transactions[:10]
+	} else {
+		sl = acc.Transactions
+	}
+	for _, tr := range sl {
+		fDate := tr.Date.Format("2006/01/02")
+		fmt.Printf("%s\t%s\t%s\t%.2f\n", fDate, tr.Payee, tr.Category, tr.Amount)
+	}
+}

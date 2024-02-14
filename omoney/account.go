@@ -98,3 +98,8 @@ func ParseAccountType(input string) (AccountType, error) {
 		return UnknownAccount, fmt.Errorf("account type %s not recognized", input)
 	}
 }
+
+func (acc *Account) AddTransaction(tr Transaction) {
+	//TODO: it is probably preferable to keep Transactions sorted by date
+	acc.Transactions = append(acc.Transactions, tr)
+}

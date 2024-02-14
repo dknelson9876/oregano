@@ -10,7 +10,7 @@ type Model struct {
 	Aliases  map[string]string // alias -> uuid
 }
 
-func (m *Model) getAccount(input string) (Account, error) {
+func (m *Model) GetAccount(input string) (Account, error) {
 	if acc, ok := m.Accounts[input]; ok {
 		return acc, nil
 	} else if id, ok := m.Aliases[input]; ok {
@@ -19,10 +19,35 @@ func (m *Model) getAccount(input string) (Account, error) {
 		return Account{}, fmt.Errorf("input not recognized as valid account ID or alias: %s", input)
 	}
 }
+
+func (m *Model) IsValidAccount(input string) bool {
+	if _, ok := m.Accounts[input]; ok {
+		return true
+	} else if _, ok := m.Aliases[input]; ok {
+		return true
+	} else {
+		return false
+	}
+}
+
+// Given an id, returns that id.
+// Given an alias, returns the matching alias.
+// So that, given an alias or an id as input, reliably
+// change it to an id
+func (m *Model) resolveToId(input string) (string, error) {
+	if _, ok := m.Accounts[input]; ok {
+		return input, nil
+	} else if id, ok := m.Aliases[input]; ok {
+		return id, nil
+	} else {
+		return "", fmt.Errorf("input not recognized as valid id or alias")
+	}
+}
+
 // given a string that is an id or an alias, return the matching
 // Account's PlaidToken
 func (m *Model) GetAccessToken(input string) (string, error) {
-	acc, err := m.getAccount(input)
+	acc, err := m.GetAccount(input)
 	if err != nil {
 		return "", err
 	} else {
@@ -63,4 +88,11 @@ func (m *Model) SetAlias(id string, alias string) error {
 	m.Accounts[id] = acc
 	m.Aliases[alias] = id
 	return nil
+}
+
+func (m *Model) AddTransaction(tr Transaction) {
+	id := m.Aliases[tr.Account]
+	acc := m.Accounts[id]
+	acc.AddTransaction(tr)
+	m.Accounts[id] = acc
 }
