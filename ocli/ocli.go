@@ -8,7 +8,6 @@ import (
 
 	"github.com/araddon/dateparse"
 	"github.com/dknelson9876/oregano/omoney"
-	"github.com/google/uuid"
 )
 
 func CreateManualAccount(input []string) *omoney.Account {
@@ -17,7 +16,6 @@ func CreateManualAccount(input []string) *omoney.Account {
 		fmt.Println("Usage: new account [alias] [type]")
 		return nil
 	}
-	id := uuid.New().String()
 	alias := input[0]
 	accType, err := omoney.ParseAccountType(input[1])
 	if err != nil {
@@ -25,12 +23,10 @@ func CreateManualAccount(input []string) *omoney.Account {
 		return nil
 	}
 
-	return &omoney.Account{
-		Id:           id,
-		Alias:        alias,
-		Type:         accType,
-		Transactions: make([]omoney.Transaction, 0),
-	}
+	return omoney.NewAccount(
+		omoney.WithAlias(alias),
+		omoney.WithAccountType(accType),
+	)
 }
 
 func CreateManualTransaction(input []string) *omoney.Transaction {
@@ -109,15 +105,8 @@ func CreateManualTransaction(input []string) *omoney.Transaction {
 		date = time.Now()
 	}
 
-	id := uuid.New().String()
-
-	return &omoney.Transaction{
-		UUID:        id,
-		Date:        date,
-		Amount:      amount,
-		Account:     acc,
-		Payee:       payee,
-		Category:    cat,
-		Description: desc,
-	}
+	return omoney.NewTransaction(acc, payee, amount,
+		omoney.WithDate(date),
+		omoney.WithCategory(cat),
+		omoney.WithDescription(desc))
 }

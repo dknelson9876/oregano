@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dknelson9876/oregano/omoney"
+	om "github.com/dknelson9876/oregano/omoney"
 )
 
 // new tr [acc] [payee] [amount] (date) (cat)
@@ -12,13 +12,10 @@ import (
 
 func TestNewTrFullPositional(t *testing.T) {
 	tr := CreateManualTransaction([]string{"chase", "mcdonalds", "21.45", "3/18/2022", "fast food", "big mac"})
-	need := omoney.NewTransaction(
-		time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local),
-		21.45,
-		"chase",
-		"mcdonalds",
-		"fast food",
-		"big mac",
+	need := om.NewTransaction("chase", "mcdonalds", 21.45,
+		om.WithDate(time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local)),
+		om.WithCategory("fast food"),
+		om.WithDescription("big mac"),
 	)
 	if !need.LooseEquals(tr) {
 		t.Fatalf(`Transaction("chase mcdonalds 21.45 3/18/2022 'fast food' 'big mac'")::`+
@@ -35,25 +32,15 @@ func TestNewTrPartialPositional(t *testing.T) {
 		{"chase", "mcdonalds", "21.45", "3/18/2022"},
 		{"chase", "mcdonalds", "21.45"},
 	}
-	expected := []omoney.Transaction{
-		omoney.NewTransaction(
-			time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local),
-			21.45,
-			"chase",
-			"mcdonalds", "fast food", "",
+	expected := []*om.Transaction{
+		om.NewTransaction("chase", "mcdonalds", 21.45,
+			om.WithDate(time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local)),
+			om.WithCategory("fast food"),
 		),
-		omoney.NewTransaction(
-			time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local),
-			21.45,
-			"chase",
-			"mcdonalds", "", "",
+		om.NewTransaction("chase", "mcdonalds", 21.45,
+			om.WithDate(time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local)),
 		),
-		omoney.NewTransaction(
-			time.Now(),
-			21.45,
-			"chase",
-			"mcdonalds", "", "",
-		),
+		om.NewTransaction("chase", "mcdonalds", 21.45),
 	}
 	for i, input := range inputs {
 		tr := CreateManualTransaction(input)
@@ -72,13 +59,10 @@ func TestNewTrMixedPositionalAndFlag(t *testing.T) {
 		{"chase", "mcdonalds", "21.45", "3/18/2022", "-d", "big mac", "-c", "fast food"},
 		{"chase", "mcdonalds", "21.45", "-d", "big mac", "-c", "fast food", "-t", "3/18/2022"},
 	}
-	expected := omoney.NewTransaction(
-		time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local),
-		21.45,
-		"chase",
-		"mcdonalds",
-		"fast food",
-		"big mac",
+	expected := om.NewTransaction("chase", "mcdonalds", 21.45,
+		om.WithDate(time.Date(2022, time.March, 18, 0, 0, 0, 0, time.Local)),
+		om.WithCategory("fast food"),
+		om.WithDescription("big mac"),
 	)
 	for _, input := range inputs {
 		tr := CreateManualTransaction(input)

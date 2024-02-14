@@ -239,12 +239,10 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 	log.Println("Institution linked!")
 	log.Printf("Item ID: %s\n", tokenPair.ItemID)
 
-	acc := &omoney.Account{
-		Id:           tokenPair.ItemID,
-		PlaidToken:   tokenPair.AccessToken,
-		Transactions: make([]omoney.Transaction, 0),
-		//TODO: AccountType
-	}
+	acc := omoney.NewAccount(
+		omoney.WithPlaidIds(tokenPair.ItemID, tokenPair.AccessToken),
+	)
+	//TODO: Pull AccountType from Plaid
 
 	log.Printf("Default alias in struct: %s\n", acc.Alias)
 
