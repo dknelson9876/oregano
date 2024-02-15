@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/plaid/plaid-go/plaid"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/dknelson9876/oregano/omoney"
+	"github.com/plaid/plaid-go/plaid"
 )
 
 // Define styles
@@ -84,13 +85,55 @@ func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			if (col > 1) {
+			if col > 1 {
 				return rightAlignStyle
 			} else {
 				return lipgloss.NewStyle()
 			}
 		}).
 		Headers("NAME", "FULL NAME", "BALANCE", "AVAILABLE").
+		Rows(rows...)
+
+	fmt.Println(t)
+}
+
+func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
+	var sl []omoney.Transaction
+	if len(acc.Transactions) > 10 {
+		sl = acc.Transactions[:10]
+	} else {
+		sl = acc.Transactions
+	}
+
+	var negAmount int
+	if acc.Type == omoney.CreditCard {
+		negAmount = 1
+	} else {
+		negAmount = -1
+	}
+
+	var rows [][]string
+	for _, tr := range sl {
+		thisRow := []string{
+			tr.Date.Format("2006/01/02"),
+			tr.Payee,
+			tr.Category,
+			fmt.Sprintf("%.2f", tr.Amount*float64(negAmount)),
+		}
+		rows = append(rows, thisRow)
+	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 2 {
+				return rightAlignStyle
+			} else {
+				return lipgloss.NewStyle()
+			}
+		}).
+		Headers("DATE", "PAYEE", "CATEGORY", "AMOUNT").
 		Rows(rows...)
 
 	fmt.Println(t)

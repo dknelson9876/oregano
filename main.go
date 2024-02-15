@@ -201,7 +201,7 @@ func main() {
 				log.Fatalln(err)
 			}
 
-			ocli.ShowTransactions(acc)
+			oview.ShowTransactions(acc)
 		case "new":
 			if len(tokens) < 2 {
 				log.Printf("Error: command 'new' requires more arguments\n")
@@ -248,6 +248,9 @@ func main() {
 				if err != nil {
 					log.Fatalln(err)
 				}
+			default:
+				log.Printf("Error: unknown subcommand %s\n", tokens[1])
+				log.Println("Valid")
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
