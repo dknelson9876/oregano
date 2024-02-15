@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"context"
+	// "context"
 	"errors"
 	"fmt"
 	"log"
@@ -78,20 +78,20 @@ func main() {
 
 	// Load the plaid environment from the config
 	viper.SetDefault("plaid.environment", "sandbox")
-	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
+	// plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
 
 	// NOTE: Plaid is manually disabled here until I can get back to integrating it
 	plaidDisabled := true
-	var plaidEnv plaid.Environment
-	switch plaidEnvStr {
-	case "sandbox":
-		plaidEnv = plaid.Sandbox
-	case "development":
-		plaidEnv = plaid.Development
-	default:
-		log.Println("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
-		plaidDisabled = true
-	}
+	// var plaidEnv plaid.Environment
+	// switch plaidEnvStr {
+	// case "sandbox":
+	// 	plaidEnv = plaid.Sandbox
+	// case "development":
+	// 	plaidEnv = plaid.Development
+	// default:
+	// 	log.Println("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
+	// 	plaidDisabled = true
+	// }
 
 	// check that the required plaid api keys are present
 	if !viper.IsSet("plaid.client_id") {
@@ -104,15 +104,15 @@ func main() {
 	}
 
 	// Build the plaid client using their library
-	var client *plaid.APIClient
-	if !plaidDisabled {
-		opts := plaid.NewConfiguration()
-		opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
-		opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
-		opts.UseEnvironment(plaidEnv)
-		client = plaid.NewAPIClient(opts)
-	}
-	ctx := context.Background()
+	// var client *plaid.APIClient
+	// if !plaidDisabled {
+	// 	opts := plaid.NewConfiguration()
+	// 	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
+	// 	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
+	// 	opts.UseEnvironment(plaidEnv)
+	// 	client = plaid.NewAPIClient(opts)
+	// }
+	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
 	fmt.Println("Welcome to Oregano, the cli budget program")
@@ -139,6 +139,10 @@ func main() {
 						"* new account [alias] [type]\t\tcreate a new manual account\n" +
 						"* new transaction []...\t\t TODO")
 					continue
+				case "ls", "list":
+					log.Println("ls - list all known accounts")
+					log.Println("usage: ls (options)")
+					log.Println("\t-l\t(long) Show more details about each account")
 				}
 			}
 			log.Println("oregano-cli - Terminal budgeting app" +
@@ -147,8 +151,9 @@ func main() {
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
 				"* list (ls)\t\tList linked institutions\n" +
-				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
 				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]\n" +
+				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
+				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
@@ -192,22 +197,28 @@ func main() {
 			}
 		case "accounts", "acc":
 			for _, input := range tokens[1:] {
-				token, err := model.GetAccessToken(input)
+				acc, err := model.GetAccount(input)
 				if err != nil {
 					log.Printf("Error: %s\n", err)
 					continue
 				}
-				if token == "" {
+				if acc.PlaidToken == "" {
 					// account was manually created
+					oview.ShowAccount(acc)
+				} else {
+					log.Println("Details about Plaid accounts has been manually disabled")
+					// Not sure where to move this code for now
+					// I guess I might end up making some kind of
+					// Plaid-compatibility layer for snippets like this
+					// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
+					// 	*plaid.NewAccountsGetRequest(token),
+					// ).Execute()
+					// if err != nil {
+					// 	log.Println(err)
+					// 	continue
+					// }
+					// oview.ShowPlaidAccounts(resp.GetAccounts())
 				}
-				resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
-					*plaid.NewAccountsGetRequest(token),
-				).Execute()
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				oview.ShowPlaidAccounts(resp.GetAccounts())
 			}
 
 		case "transactions", "trs":

@@ -188,3 +188,12 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 	t := table.New().Headers(headers...).Rows(rows...)
 	fmt.Println(t)
 }
+
+func (v *OViewPlain) ShowAccount(acc omoney.Account) {
+	fmt.Printf("Id: %s\nAlias: %s\nType: %s\nAnchor: ($%.2f, %s)\n",
+		acc.Id,
+		acc.Alias,
+		acc.Type,
+		acc.AnchorBalance,
+		acc.AnchorTime)
+}
