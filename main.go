@@ -18,6 +18,7 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 )
 
@@ -73,12 +74,14 @@ func main() {
 	viper.AutomaticEnv()
 
 	// Use helper to detect country and lang from env/config
-	countries, lang := DetectRegion()
+	// countries, lang := DetectRegion()
 
 	// Load the plaid environment from the config
 	viper.SetDefault("plaid.environment", "sandbox")
 	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
 
+	// NOTE: Plaid is manually disabled here until I can get back to integrating it
+	plaidDisabled := true
 	var plaidEnv plaid.Environment
 	switch plaidEnvStr {
 	case "sandbox":
@@ -86,25 +89,29 @@ func main() {
 	case "development":
 		plaidEnv = plaid.Development
 	default:
-		log.Fatalln("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
+		log.Println("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
+		plaidDisabled = true
 	}
 
 	// check that the required plaid api keys are present
 	if !viper.IsSet("plaid.client_id") {
-		log.Println("⚠️  PLAID_CLIENT_ID not set. Please set in as an envvar or in config.json.")
-		os.Exit(1)
+		log.Println("⚠️  PLAID_CLIENT_ID not set. Plaid connected features will not work until PLAID_CLIENT_ID is set in as an envvar or in config.json.")
+		plaidDisabled = true
 	}
 	if !viper.IsSet("plaid.secret") {
-		log.Println("⚠️ PLAID_SECRET not set. Please set in as an envvar or in config.json.")
-		os.Exit(1)
+		log.Println("⚠️ PLAID_SECRET not set. Plaid connected features will not work until PLAID_SECRET is set in as an envvar or in config.json.")
+		plaidDisabled = true
 	}
 
 	// Build the plaid client using their library
-	opts := plaid.NewConfiguration()
-	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
-	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
-	opts.UseEnvironment(plaidEnv)
-	client := plaid.NewAPIClient(opts)
+	var client *plaid.APIClient
+	if !plaidDisabled {
+		opts := plaid.NewConfiguration()
+		opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
+		opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
+		opts.UseEnvironment(plaidEnv)
+		client = plaid.NewAPIClient(opts)
+	}
 	ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
@@ -146,16 +153,21 @@ func main() {
 		case "q", "quit":
 			return
 		case "link":
-			linkNewInstitution(model, client, countries, lang)
+			if plaidDisabled {
+				log.Println("Link has been manually disabled")
+				// linkNewInstitution(model, client, countries, lang)
+			} else {
+				log.Println("link is unavailable while Plaid integration is disabled")
+			}
 		case "list", "ls":
-			log.Println("Institutions:")
-			for id, acc := range model.Accounts {
-				if acc.Alias != "" {
-					log.Printf("-- %s\t(%s)\n", acc.Alias, id)
-				} else {
-					log.Printf("-- %s\n", id)
+			ops := ocli.ShowAccountOptions{ShowType: true}
+			if len(tokens) > 1 {
+				if strings.Contains(tokens[1], "l") {
+					ops.ShowId = true
+					ops.ShowAnchor = true
 				}
 			}
+			oview.ShowAccounts(maps.Values(model.Accounts), ops)
 		case "alias":
 			if len(tokens) != 3 {
 				log.Println("Error: alias requires exactly 2 arguments")
@@ -185,6 +197,9 @@ func main() {
 					log.Printf("Error: %s\n", err)
 					continue
 				}
+				if token == "" {
+					// account was manually created
+				}
 				resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
 					*plaid.NewAccountsGetRequest(token),
 				).Execute()
@@ -192,7 +207,7 @@ func main() {
 					log.Println(err)
 					continue
 				}
-				oview.ShowAccounts(resp.GetAccounts())
+				oview.ShowPlaidAccounts(resp.GetAccounts())
 			}
 
 		case "transactions", "trs":
@@ -250,7 +265,7 @@ func main() {
 				}
 			default:
 				log.Printf("Error: unknown subcommand %s\n", tokens[1])
-				log.Println("Valid")
+				log.Println("Valid subcommands are: account, transaction")
 			}
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")

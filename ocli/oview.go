@@ -31,7 +31,7 @@ func NewOViewPlain(enableColor bool) *OViewPlain {
 	}
 }
 
-func (v *OViewPlain) ShowAccount(account plaid.AccountBase) {
+func (v *OViewPlain) ShowPlaidAccount(account plaid.AccountBase) {
 	// something is up with the way that Nullables are parsed
 	//  and causing Ok's and IsSet's to be true, even when the
 	//  value is nil, so I'm just gonna directly check for nil
@@ -54,7 +54,7 @@ func (v *OViewPlain) ShowAccount(account plaid.AccountBase) {
 	fmt.Println()
 }
 
-func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
+func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	var rows [][]string
 	for _, acc := range accounts {
 		var thisRow []string
@@ -136,5 +136,55 @@ func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
 		Headers("DATE", "PAYEE", "CATEGORY", "AMOUNT").
 		Rows(rows...)
 
+	fmt.Println(t)
+}
+
+type ShowAccountOptions struct {
+	ShowType   bool
+	ShowAnchor bool
+	ShowId     bool
+}
+
+func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountOptions) {
+	rows := make([][]string, len(accounts))
+	var op ShowAccountOptions
+	var headers []string
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		op = ShowAccountOptions{}
+	}
+
+	// always show alias
+	// TODO: Plaid integration may allow accounts without aliases
+	headers = append(headers, "ALIAS")
+	for i, acc := range accounts {
+		rows[i] = append(rows[i], acc.Alias)
+	}
+
+	if op.ShowType {
+		headers = append(headers, "TYPE")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], string(acc.Type))
+		}
+	}
+
+	if op.ShowAnchor {
+		headers = append(headers, "ANCHOR")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], fmt.Sprintf("($%.2f, %s)",
+				acc.AnchorBalance,
+				acc.AnchorTime.Format("2006/01/02")))
+		}
+	}
+
+	if op.ShowId {
+		headers = append(headers, "ID")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], acc.Id)
+		}
+	}
+
+	t := table.New().Headers(headers...).Rows(rows...)
 	fmt.Println(t)
 }
