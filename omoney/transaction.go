@@ -1,8 +1,10 @@
 package omoney
 
 import (
-	"github.com/google/uuid"
+	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // A representation of a single transaction that took place between two
@@ -91,4 +93,17 @@ func (t *Transaction) LooseEquals(other *Transaction) bool {
 		t.Payee == other.Payee &&
 		t.Category == other.Category &&
 		t.Description == other.Description
+}
+
+func (t *Transaction) String() string {
+	return fmt.Sprintf("ID: %s\nAcc: %s\nPayee: %s\nAmount: %.2f\nDate: %s\nCategory: %s\nInstDescription: %s\nDescription: %s",
+		t.UUID,
+		t.Account,
+		t.Payee,
+		t.Amount,
+		t.Date.Format("2006/01/02"),
+		t.Category,
+		t.InstDescription,
+		t.Description,
+	)
 }
