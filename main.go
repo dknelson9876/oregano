@@ -130,6 +130,9 @@ func main() {
 		}
 
 		olog.Print(ocli.DebugDetail, tokens)
+		if len(tokens) == 0 {
+			continue
+		}
 		switch tokens[0] {
 		case "h", "help":
 			if len(tokens) == 2 {
@@ -228,6 +231,9 @@ func main() {
 			}
 
 			oview.ShowTransactions(acc)
+
+		case "import":
+			ocli.ReadCsv(tokens[1])
 		case "new":
 			if len(tokens) < 2 {
 				log.Printf("Error: command 'new' requires more arguments\n")
