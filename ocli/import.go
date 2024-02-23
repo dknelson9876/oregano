@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -27,11 +28,11 @@ const (
 	sDir           = "Direction (Debit/Credit)"
 )
 
-func ReadCsv(filepath string) {
+func ReadCsv(filepath string, existingAccounts []string) []*omoney.Transaction{
 	f, err := os.Open(filepath)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
-		return
+		return nil
 	}
 
 	defer f.Close()
@@ -40,7 +41,7 @@ func ReadCsv(filepath string) {
 	records, err := csvReader.ReadAll()
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
-		return
+		return nil
 	}
 
 	headerPrompt := confirmation.New(
@@ -52,14 +53,16 @@ func ReadCsv(filepath string) {
 	headers, err := headerPrompt.RunPrompt()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
-		return
+		return nil
 	}
 
+	// loop until columns are accepted as correct
+	var colMap map[string]int
 	for {
-		colMap, err := buildColumnMap(records, headers)
+		colMap, err = buildColumnMap(records, headers)
 		if err != nil {
 			fmt.Printf("Leaving import setup: %s\n", err)
-			return
+			return nil
 		}
 		// fmt.Println(colMap)
 
@@ -75,7 +78,7 @@ func ReadCsv(filepath string) {
 		if err != nil {
 			fmt.Printf("Error: %s\n", err)
 		} else {
-			fmt.Printf("The first transaction was parsed into:\n%s", tr)
+			fmt.Printf("The first transaction was parsed into:\n%s\n", tr)
 			canContinue = true
 		}
 
@@ -94,7 +97,7 @@ func ReadCsv(filepath string) {
 		response, err := restartPrompt.RunPrompt()
 		if err != nil {
 			fmt.Printf("Something went wrong with the prompt: %v\n", err)
-			return
+			return nil
 		}
 
 		if !response {
@@ -106,7 +109,7 @@ func ReadCsv(filepath string) {
 				// said no to reassign when columns could not be parsed
 				// so cancel the import
 				fmt.Println("Canceling import...")
-				return
+				return nil
 			}
 		}
 		// else said yes to reassign, so let the loop restart
@@ -114,12 +117,55 @@ func ReadCsv(filepath string) {
 	}
 	fmt.Println("Processing...")
 
-	// accMap := make(map[string]string, 0) // name in csv -> alias in model
-	// newTrans := make([]omoney.Transaction, 0)
+	accMap := make(map[string]string, 0) // name in csv -> alias in model
+	newTrans := make([]*omoney.Transaction, 0)
 
-	// for _, rec := range records {
+	var recordsRange [][]string
+	if headers {
+		recordsRange = records[1:]
+	} else {
+		recordsRange = records
+	}
 
-	// }
+	for _, rec := range recordsRange {
+		tr, err := tryBuildTransaction(rec, colMap)
+		if err != nil {
+			fmt.Printf("Failed to import: %s\n", err)
+			fmt.Printf("Row: %s\n", rec)
+			continue
+		}
+
+		// if transaction for this account is not a registered account,
+		if !slices.Contains(existingAccounts, tr.Account) {
+			if matchedAcc, ok := accMap[tr.Account]; ok {
+				// if a known match exists, change it to that match
+				tr.Account = matchedAcc
+			} else {
+				// else ask what the match should be, store it, and set it
+				keymap := selection.NewDefaultKeyMap()
+				keymap.Up = append(keymap.Up, "k")
+				keymap.Down = append(keymap.Down, "j")
+
+				fmt.Printf("Account matching '%s' doesn't match known accounts. Please select the existing account that matches\n", tr.Account)
+				sel := selection.New("", existingAccounts)
+				sel.Filter = nil
+				sel.KeyMap = keymap
+
+				response, err := sel.RunPrompt()
+				if err != nil {
+					fmt.Println("Import canceled")
+					return nil
+				}
+
+				accMap[tr.Account] = response
+				tr.Account = response
+			}
+		}
+
+		newTrans = append(newTrans, tr)
+	}
+
+	return newTrans
 }
 
 func buildColumnMap(records [][]string, headers bool) (map[string]int, error) {

@@ -118,7 +118,7 @@ func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
 			tr.Date.Format("2006/01/02"),
 			tr.Payee,
 			tr.Category,
-			fmt.Sprintf("%.2f", tr.Amount*float64(negAmount)),
+			fmt.Sprintf("$%.2f", tr.Amount*float64(negAmount)),
 		}
 		rows = append(rows, thisRow)
 	}
@@ -127,7 +127,7 @@ func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			if col == 2 {
+			if col == 3 {
 				return rightAlignStyle
 			} else {
 				return lipgloss.NewStyle()

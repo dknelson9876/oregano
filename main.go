@@ -233,7 +233,14 @@ func main() {
 			oview.ShowTransactions(acc)
 
 		case "import":
-			ocli.ReadCsv(tokens[1])
+			newTrans := ocli.ReadCsv(tokens[1], maps.Keys(model.Aliases))
+			for _, tr := range newTrans {
+				model.AddTransaction(*tr)
+			}
+			err = ocli.Save(model)
+			if err != nil {
+				log.Fatalln(err)
+			}
 		case "new":
 			if len(tokens) < 2 {
 				log.Printf("Error: command 'new' requires more arguments\n")
