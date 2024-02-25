@@ -2,6 +2,7 @@ package ocli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -97,24 +98,18 @@ func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	fmt.Println(t)
 }
 
-func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
-	var sl []omoney.Transaction
-	if len(acc.Transactions) > 10 {
-		sl = acc.Transactions[:10]
-	} else {
-		sl = acc.Transactions
-	}
-
+func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, startIndex int) {
 	var negAmount int
-	if acc.Type == omoney.CreditCard {
-		negAmount = 1
-	} else {
+	if invert {
 		negAmount = -1
+	} else {
+		negAmount = 1
 	}
 
 	var rows [][]string
-	for _, tr := range sl {
+	for i, tr := range trs {
 		thisRow := []string{
+			strconv.Itoa(startIndex + i),
 			tr.Date.Format("2006/01/02"),
 			tr.Payee,
 			tr.Category,
@@ -127,16 +122,58 @@ func (v *OViewPlain) ShowTransactions(acc omoney.Account) {
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			if col == 3 {
+			if col == 4 {
 				return rightAlignStyle
 			} else {
 				return lipgloss.NewStyle()
 			}
 		}).
-		Headers("DATE", "PAYEE", "CATEGORY", "AMOUNT").
+		Headers("", "DATE", "PAYEE", "CATEGORY", "AMOUNT").
 		Rows(rows...)
 
 	fmt.Println(t)
+}
+
+type ShowTransactionOptions struct {
+	ShowId       bool
+	ShowCategory bool
+	ShowInstDesc bool
+	ShowDesc     bool
+}
+
+func (v *OViewPlain) ShowTransaction(tr omoney.Transaction, ops ...ShowTransactionOptions) {
+	rows := make([]string, 0)
+	var op ShowTransactionOptions
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		op = ShowTransactionOptions{}
+	}
+
+	if op.ShowId {
+		rows = append(rows, fmt.Sprintf("Id: %s", tr.UUID))
+	}
+
+	rows = append(rows, fmt.Sprintf("Account: %s", tr.Account))
+	rows = append(rows, fmt.Sprintf("Payee: %s", tr.Payee))
+	rows = append(rows, fmt.Sprintf("Amount: $%.2f", tr.Amount))
+	rows = append(rows, fmt.Sprintf("Date: %s", tr.Date.Format("2006/01/02")))
+
+	if op.ShowCategory {
+		rows = append(rows, fmt.Sprintf("Category: %s", tr.Category))
+	}
+
+	if op.ShowInstDesc {
+		rows = append(rows, fmt.Sprintf("Inst Description: %s", tr.InstDescription))
+	}
+
+	if op.ShowDesc {
+		rows = append(rows, fmt.Sprintf("Description: %s", tr.Description))
+	}
+
+	for _, row := range rows {
+		fmt.Println(row)
+	}
 }
 
 type ShowAccountOptions struct {

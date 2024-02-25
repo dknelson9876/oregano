@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"strconv"
 	// "context"
 	"errors"
 	"fmt"
@@ -115,6 +116,8 @@ func main() {
 	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
+	workingList := make([]interface{}, 0)
+
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
 	for {
@@ -157,6 +160,7 @@ func main() {
 				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]\n" +
 				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
 				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
+				"* print (p) [argument index]\tPrint more details about something that was output\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
@@ -230,7 +234,19 @@ func main() {
 				log.Fatalln(err)
 			}
 
-			oview.ShowTransactions(acc)
+			var sl []omoney.Transaction
+			if len(acc.Transactions) > 10 {
+				sl = acc.Transactions[:10]
+			} else {
+				sl = acc.Transactions
+			}
+
+			invert := acc.Type != omoney.CreditCard
+			oview.ShowTransactions(sl, invert, len(workingList))
+
+			for i := range sl {
+				workingList = append(workingList, &sl[i])
+			}
 
 		case "import":
 			newTrans := ocli.ReadCsv(tokens[1], maps.Keys(model.Aliases))
@@ -241,6 +257,50 @@ func main() {
 			if err != nil {
 				log.Fatalln(err)
 			}
+
+		case "print", "p":
+			// -l	long (detailed)
+			if len(tokens) < 2 {
+				fmt.Println("Error: 'print' requires an argument")
+				continue
+			}
+			long := false
+			arg := ""
+			i := 1
+			for i < len(tokens) {
+				if strings.HasPrefix(tokens[i], "-") {
+					switch tokens[i] {
+					case "-l":
+						long = true
+						i++
+					}
+				} else {
+					arg = tokens[i]
+					i++
+				}
+			}
+			idx, err := strconv.Atoi(arg)
+			if err != nil {
+				log.Printf("Error: parsed token %s as arg, but could not parse it into an index\n", arg)
+				continue
+			}
+
+			if idx < len(workingList) {
+				switch v := workingList[idx].(type) {
+				default:
+					fmt.Printf("%v\n", v)
+				case *omoney.Transaction:
+					ops := ocli.ShowTransactionOptions{}
+					if long {
+						ops.ShowId = true
+						ops.ShowCategory = true
+						ops.ShowInstDesc = true
+						ops.ShowDesc = true
+					}
+					oview.ShowTransaction(*v, ops)
+				}
+			}
+
 		case "new":
 			if len(tokens) < 2 {
 				log.Printf("Error: command 'new' requires more arguments\n")
