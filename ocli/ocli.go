@@ -110,3 +110,28 @@ func CreateManualTransaction(input []string) *omoney.Transaction {
 		omoney.WithCategory(cat),
 		omoney.WithDescription(desc))
 }
+
+func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]string, error) {
+	toreturn := make(map[string][]string, len(flagMap))
+
+	i := 0
+	for i < len(tokens) {
+		if argCount, ok := flagMap[tokens[i]]; ok {
+			if i+argCount > len(tokens) {
+				return nil, fmt.Errorf("missing arguments for flag %s", tokens[i])
+			} else {
+				//TODO: check that tokens captured as args here are not
+				// other flags
+				toreturn[tokens[i]] = tokens[i+1:i+1+argCount]
+				i++
+			}
+
+		} else {
+			return nil, fmt.Errorf("invalid flag %s", tokens[i])
+		}
+	}
+
+	return toreturn, nil
+}
+
+

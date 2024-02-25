@@ -174,12 +174,23 @@ func main() {
 		case "list", "ls":
 			ops := ocli.ShowAccountOptions{ShowType: true}
 			if len(tokens) > 1 {
-				if strings.Contains(tokens[1], "l") {
+				validFlags := map[string]int {
+					"-l": 0, // long (detailed)
+				}
+
+				flags, err := ocli.ParseTokensToFlags(tokens[1:], validFlags)
+				if err != nil {
+					log.Printf("Error: %s\n", err)
+				}
+
+				if _, ok := flags["-l"]; ok {
 					ops.ShowId = true
 					ops.ShowAnchor = true
 				}
 			}
+
 			oview.ShowAccounts(maps.Values(model.Accounts), ops)
+
 		case "alias":
 			if len(tokens) != 3 {
 				log.Println("Error: alias requires exactly 2 arguments")
@@ -202,7 +213,7 @@ func main() {
 					ocli.Save(model)
 				}
 			}
-		case "accounts", "acc":
+		case "account", "acc":
 			for _, input := range tokens[1:] {
 				acc, err := model.GetAccount(input)
 				if err != nil {
