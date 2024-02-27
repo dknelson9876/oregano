@@ -1,6 +1,7 @@
 package ocli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -111,9 +112,11 @@ func CreateManualTransaction(input []string) *omoney.Transaction {
 		omoney.WithDescription(desc))
 }
 
+// format of flagMap is {<flag>: <number of arguments for flag>}
 func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]string, error) {
 	toreturn := make(map[string][]string, len(flagMap))
 
+	tokens = tokens[1:] // trim off command name every time
 	i := 0
 	for i < len(tokens) {
 		if argCount, ok := flagMap[tokens[i]]; ok {
@@ -122,8 +125,19 @@ func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]s
 			} else {
 				//TODO: check that tokens captured as args here are not
 				// other flags
-				toreturn[tokens[i]] = tokens[i+1:i+1+argCount]
-				i++
+				toreturn[tokens[i]] = tokens[i+1 : i+1+argCount]
+				i += argCount + 1
+			}
+
+		} else if argCount, ok := flagMap["<>"]; ok {
+			// use "<>" as special flag for plain arguments
+			if i+argCount > len(tokens) {
+				return nil, fmt.Errorf("missing arguments for flag %s", tokens[i])
+			} else {
+				//TODO: check that tokens captured as args here are not
+				// other flags
+				toreturn["<>"] = tokens[i : i+argCount]
+				i += argCount
 			}
 
 		} else {
@@ -131,7 +145,12 @@ func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]s
 		}
 	}
 
+	if _, ok := flagMap["<>"]; ok {
+		if _, ok := toreturn["<>"]; !ok {
+			// if we found no plain arguments, but they are needed
+			return nil, errors.New("missing required positional arguments")
+		}
+	}
+
 	return toreturn, nil
 }
-
-

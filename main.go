@@ -149,6 +149,7 @@ func main() {
 					log.Println("ls - list all known accounts")
 					log.Println("usage: ls (options)")
 					log.Println("\t-l\t(long) Show more details about each account")
+					continue
 				}
 			}
 			log.Println("oregano-cli - Terminal budgeting app" +
@@ -174,13 +175,15 @@ func main() {
 		case "list", "ls":
 			ops := ocli.ShowAccountOptions{ShowType: true}
 			if len(tokens) > 1 {
-				validFlags := map[string]int {
+				validFlags := map[string]int{
 					"-l": 0, // long (detailed)
 				}
 
-				flags, err := ocli.ParseTokensToFlags(tokens[1:], validFlags)
+				flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
 				if err != nil {
-					log.Printf("Error: %s\n", err)
+					log.Println("Fail to parse 'ls' command")
+					log.Println("Usage: ls (flags)")
+					log.Println("Use 'help ls' for flags")
 				}
 
 				if _, ok := flags["-l"]; ok {
@@ -192,55 +195,99 @@ func main() {
 			oview.ShowAccounts(maps.Values(model.Accounts), ops)
 
 		case "alias":
-			if len(tokens) != 3 {
-				log.Println("Error: alias requires exactly 2 arguments")
+			validFlags := map[string]int{
+				"<>": 2,
+			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'alias' command")
 				log.Println("Usage: alias [token] [alias]")
+				log.Println("Use 'help alias' for details")
+				continue
+			}
+
+			err = model.SetAlias(flags["<>"][0], flags["<>"][1])
+			if err != nil {
+				log.Printf("Error: %s\n", err)
 			} else {
-				err = model.SetAlias(tokens[1], tokens[2])
-				if err != nil {
-					log.Printf("Error: %s\n", err)
-				} else {
-					ocli.Save(model)
-				}
+				ocli.Save(model)
 			}
+
 		case "remove", "rm":
-			for _, input := range tokens[1:] {
-				log.Printf("Removing institution %s\n", input)
-				err = model.RemoveAcount(input)
-				if err != nil {
-					log.Println(err)
-				} else {
-					ocli.Save(model)
-				}
+			validFlags := map[string]int{
+				"<>": 1,
 			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'rm' command")
+				log.Println("Usage: rm [alias/id]")
+				log.Println("Use 'help remove' for details")
+				continue
+			}
+
+			input := flags["<>"][0]
+			log.Printf("Removing institution %s\n", input)
+			err = model.RemoveAcount(input)
+			if err != nil {
+				log.Println(err)
+			} else {
+				ocli.Save(model)
+			}
+
 		case "account", "acc":
-			for _, input := range tokens[1:] {
-				acc, err := model.GetAccount(input)
-				if err != nil {
-					log.Printf("Error: %s\n", err)
-					continue
-				}
-				if acc.PlaidToken == "" {
-					// account was manually created
-					oview.ShowAccount(acc)
-				} else {
-					log.Println("Details about Plaid accounts has been manually disabled")
-					// Not sure where to move this code for now
-					// I guess I might end up making some kind of
-					// Plaid-compatibility layer for snippets like this
-					// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
-					// 	*plaid.NewAccountsGetRequest(token),
-					// ).Execute()
-					// if err != nil {
-					// 	log.Println(err)
-					// 	continue
-					// }
-					// oview.ShowPlaidAccounts(resp.GetAccounts())
-				}
+			validFlags := map[string]int{
+				"<>": 1,
+			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'acc' command")
+				log.Println("Usage: acc [alias/id]")
+				log.Println("Use 'help account' for details")
+				continue
+			}
+
+			input := flags["<>"][0]
+			acc, err := model.GetAccount(input)
+			if err != nil {
+				log.Printf("Error: %s\n", err)
+				continue
+			}
+			if acc.PlaidToken == "" {
+				// account was manually created
+				oview.ShowAccount(acc)
+			} else {
+				log.Println("Details about Plaid accounts has been manually disabled")
+				// Not sure where to move this code for now
+				// I guess I might end up making some kind of
+				// Plaid-compatibility layer for snippets like this
+				// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
+				// 	*plaid.NewAccountsGetRequest(token),
+				// ).Execute()
+				// if err != nil {
+				// 	log.Println(err)
+				// 	continue
+				// }
+				// oview.ShowPlaidAccounts(resp.GetAccounts())
 			}
 
 		case "transactions", "trs":
-			acc, err := model.GetAccount(tokens[1])
+			validFlags := map[string]int{
+				"<>": 1,
+			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'trs' command")
+				log.Println("Usage: trs [alias/id]")
+				log.Println("Use 'help transactions' for details")
+				continue
+			}
+
+			input := flags["<>"][0]
+			acc, err := model.GetAccount(input)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -260,7 +307,20 @@ func main() {
 			}
 
 		case "import":
-			newTrans := ocli.ReadCsv(tokens[1], maps.Keys(model.Aliases))
+			validFlags := map[string]int{
+				"<>": 1,
+			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'import' command")
+				log.Println("Usage: import [filename]")
+				log.Println("Use 'help import' for details")
+				continue
+			}
+
+			input := flags["<>"][0]
+			newTrans := ocli.ReadCsv(input, maps.Keys(model.Aliases))
 			for _, tr := range newTrans {
 				model.AddTransaction(*tr)
 			}
@@ -271,25 +331,22 @@ func main() {
 
 		case "print", "p":
 			// -l	long (detailed)
-			if len(tokens) < 2 {
-				fmt.Println("Error: 'print' requires an argument")
+			validFlags := map[string]int{
+				"<>": 1,
+				"-l": 0,
+			}
+
+			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+			if err != nil {
+				log.Println("Fail to parse 'import' command")
+				log.Println("Usage: import [filename]")
+				log.Println("Use 'help import' for details")
 				continue
 			}
-			long := false
-			arg := ""
-			i := 1
-			for i < len(tokens) {
-				if strings.HasPrefix(tokens[i], "-") {
-					switch tokens[i] {
-					case "-l":
-						long = true
-						i++
-					}
-				} else {
-					arg = tokens[i]
-					i++
-				}
-			}
+
+			_, long := flags["-l"]
+			arg := flags["<>"][0]
+
 			idx, err := strconv.Atoi(arg)
 			if err != nil {
 				log.Printf("Error: parsed token %s as arg, but could not parse it into an index\n", arg)
@@ -317,9 +374,24 @@ func main() {
 				log.Printf("Error: command 'new' requires more arguments\n")
 				continue
 			}
-			switch tokens[1] {
+
+			tokens := tokens[1:]
+
+			switch tokens[0] {
 			case "account", "acc":
-				acc := ocli.CreateManualAccount(tokens[2:])
+				validFlags := map[string]int{
+					"<>": 2,
+				}
+
+				flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+				if err != nil {
+					log.Println("Fail to parse 'new acc' command")
+					log.Println("Usage: new acc [alias] [type]")
+					log.Println("Use 'help new' for details")
+					continue
+				}
+
+				acc := ocli.CreateManualAccount(flags["<>"])
 				if acc == nil {
 					log.Println("Error making new manual account")
 					continue
@@ -332,17 +404,27 @@ func main() {
 			case "transaction", "tr":
 				// new tr [acc] [payee] [amount] (date) (cat)
 				//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
-				if len(tokens) < 3 {
-					log.Printf("Error: command 'new transaction' requires more arguments\n")
-					log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
+				validFlags := map[string]int {
+					"<>": 3,
+					"-t": 1,
+					"-c": 1,
+					"-d": 1,
+				}
+
+				str, _ := shlex.Split(strings.Join(tokens[2:], " "))
+				flags, err := ocli.ParseTokensToFlags(str, validFlags)
+				if err != nil {
+					log.Println("Fail to parse 'new tr' command")
+					log.Println("Usage: new acc [account] [payee] [amount] (options)")
+					log.Println("Use 'help new' for details")
 					continue
 				}
-				if !model.IsValidAccount(tokens[2]) {
+
+				if !model.IsValidAccount(flags["<>"][0]) {
 					log.Printf("Error: %s\n", err)
 					continue
 				}
 
-				str, _ := shlex.Split(strings.Join(tokens[2:], " "))
 				tr := ocli.CreateManualTransaction(str)
 				if tr == nil {
 					log.Println("Error making new manual transaction")
