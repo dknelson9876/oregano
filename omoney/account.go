@@ -2,6 +2,7 @@ package omoney
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,10 +34,13 @@ type Account struct {
 	Transactions []Transaction
 	// The known value of this account at the time specified
 	// in `AnchorTime`. Optional field that defaults to 0
-	AnchorBalance float64
+	anchorBalance float64
 	// The time specified for the known value `AnchorBalance`.
 	// Optional field that defaults to time.Now()
-	AnchorTime time.Time
+	anchorTime time.Time
+	// The calculated current balance of this account
+	CurrentBalance float64
+	// The time at which `CurrentBalance` was last calculated
 }
 
 type AccountOption func(*Account)
@@ -46,7 +50,7 @@ func NewAccount(options ...AccountOption) *Account {
 		Id:           uuid.New().String(),
 		Type:         UnknownAccount,
 		Transactions: make([]Transaction, 0),
-		AnchorTime:   time.Now(),
+		anchorTime:   time.Now(),
 	}
 
 	for _, op := range options {
@@ -71,8 +75,8 @@ func WithAlias(alias string) AccountOption {
 
 func WithAnchor(balance float64, time time.Time) AccountOption {
 	return func(acc *Account) {
-		acc.AnchorBalance = balance
-		acc.AnchorTime = time
+		acc.anchorBalance = balance
+		acc.anchorTime = time
 	}
 }
 
@@ -99,7 +103,46 @@ func ParseAccountType(input string) (AccountType, error) {
 	}
 }
 
+func (acc *Account) SetAnchor(balance float64, time time.Time) {
+	acc.anchorBalance = balance
+	acc.anchorTime = time
+	acc.UpdateCurrentBalance()
+}
+
+func (acc *Account) GetAnchor() (float64, time.Time) {
+	return acc.anchorBalance, acc.anchorTime
+}
+
+func (acc *Account) GetAnchorBalance() float64 {
+	return acc.anchorBalance
+}
+
+func (acc *Account) GetAnchorTime() time.Time {
+	return acc.anchorTime
+}
+
 func (acc *Account) AddTransaction(tr Transaction) {
-	//TODO: it is probably preferable to keep Transactions sorted by date
 	acc.Transactions = append(acc.Transactions, tr)
+	sort.Slice(acc.Transactions, func(i, j int) bool {
+		return acc.Transactions[i].Date.After(acc.Transactions[j].Date)
+	})
+
+	acc.UpdateCurrentBalance()
+}
+
+func (acc *Account) UpdateCurrentBalance() {
+	i := sort.Search(len(acc.Transactions), func (i int) bool {
+		return acc.anchorTime.After(acc.Transactions[i].Date)
+	})
+
+	affectingTransactions := acc.Transactions[:i]
+	fmt.Println(affectingTransactions)
+	fmt.Println(i)
+	bal := acc.anchorBalance
+	for _, t := range affectingTransactions {
+		bal += t.Amount
+	}
+
+	acc.CurrentBalance = bal
+	fmt.Printf("New balance $%.2f\n", bal)
 }

@@ -199,6 +199,11 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 		rows[i] = append(rows[i], acc.Alias)
 	}
 
+	headers = append(headers, "BALANCE")
+	for i, acc := range accounts {
+		rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
+	}
+
 	if op.ShowType {
 		headers = append(headers, "TYPE")
 		for i, acc := range accounts {
@@ -210,8 +215,8 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 		headers = append(headers, "ANCHOR")
 		for i, acc := range accounts {
 			rows[i] = append(rows[i], fmt.Sprintf("($%.2f, %s)",
-				acc.AnchorBalance,
-				acc.AnchorTime.Format("2006/01/02")))
+				acc.GetAnchorBalance(),
+				acc.GetAnchorTime().Format("2006/01/02")))
 		}
 	}
 
@@ -231,6 +236,6 @@ func (v *OViewPlain) ShowAccount(acc omoney.Account) {
 		acc.Id,
 		acc.Alias,
 		acc.Type,
-		acc.AnchorBalance,
-		acc.AnchorTime)
+		acc.GetAnchorBalance(),
+		acc.GetAnchorTime())
 }

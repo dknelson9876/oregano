@@ -150,6 +150,10 @@ func main() {
 					log.Println("usage: ls (options)")
 					log.Println("\t-l\t(long) Show more details about each account")
 					continue
+				case "acc", "account":
+					log.Println("account - print or edit information about an account\n" +
+						"Usage: account [alias/id] (options)\n" +
+						"\t-a <amount> <date>\t(anchor) set a known amount at a time to base balance off of")
 				}
 			}
 			log.Println("oregano-cli - Terminal budgeting app" +
@@ -239,6 +243,7 @@ func main() {
 		case "account", "acc":
 			validFlags := map[string]int{
 				"<>": 1,
+				"-a": 2,
 			}
 
 			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
@@ -249,7 +254,16 @@ func main() {
 				continue
 			}
 
+			fmt.Println(flags)
 			input := flags["<>"][0]
+			if anchor, ok := flags["-a"]; ok {
+				err = model.SetAnchor(input, anchor)
+				if err != nil {
+					log.Printf("Error: %s\n", err)
+				}
+				continue
+			}
+
 			acc, err := model.GetAccount(input)
 			if err != nil {
 				log.Printf("Error: %s\n", err)

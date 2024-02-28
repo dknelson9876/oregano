@@ -2,10 +2,13 @@ package omoney
 
 import (
 	"fmt"
+	"strconv"
+
+	"github.com/araddon/dateparse"
 )
 
 type Model struct {
-	FilePath  string
+	FilePath string
 	Accounts map[string]Account
 	Aliases  map[string]string // alias -> uuid
 }
@@ -55,7 +58,7 @@ func (m *Model) GetAccessToken(input string) (string, error) {
 	}
 }
 
-func (m *Model) AddAccount(acc Account)  {
+func (m *Model) AddAccount(acc Account) {
 	m.Accounts[acc.Id] = acc
 	if acc.Alias != "" {
 		m.Aliases[acc.Alias] = acc.Id
@@ -75,7 +78,7 @@ func (m *Model) RemoveAcount(input string) error {
 	return fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
 }
 
-//TODO: be sure to save the model after calling this method
+// TODO: be sure to save the model after calling this method
 func (m *Model) SetAlias(id string, alias string) error {
 	var acc Account
 	var ok bool
@@ -87,6 +90,28 @@ func (m *Model) SetAlias(id string, alias string) error {
 	acc.Alias = alias
 	m.Accounts[id] = acc
 	m.Aliases[alias] = id
+	return nil
+}
+
+func (m *Model) SetAnchor(account string, anchor []string) error {
+	id, err := m.resolveToId(account)
+	if err != nil {
+		return err
+	}
+
+	amount, err := strconv.ParseFloat(anchor[0], 64)
+	if err != nil {
+		return err
+	}
+
+	date, err := dateparse.ParseLocal(anchor[1])
+	if err != nil {
+		return err
+	}
+
+	acc := m.Accounts[id]
+	acc.SetAnchor(amount, date)
+	m.Accounts[id] = acc
 	return nil
 }
 
