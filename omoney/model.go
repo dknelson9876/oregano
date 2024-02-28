@@ -65,7 +65,7 @@ func (m *Model) AddAccount(acc Account) {
 	}
 }
 
-func (m *Model) RemoveAcount(input string) error {
+func (m *Model) RemoveAccount(input string) error {
 	if acc, ok := m.Accounts[input]; ok {
 		delete(m.Accounts, input)
 		delete(m.Aliases, acc.Alias)
@@ -119,5 +119,12 @@ func (m *Model) AddTransaction(tr Transaction) {
 	id := m.Aliases[tr.Account]
 	acc := m.Accounts[id]
 	acc.AddTransaction(tr)
+	m.Accounts[id] = acc
+}
+
+func (m *Model) RemoveTransaction(tr *Transaction) {
+	id := m.Aliases[tr.Account]
+	acc := m.Accounts[id]
+	acc.RemoveTransaction(tr)
 	m.Accounts[id] = acc
 }

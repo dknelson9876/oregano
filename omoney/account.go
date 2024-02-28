@@ -130,19 +130,26 @@ func (acc *Account) AddTransaction(tr Transaction) {
 	acc.UpdateCurrentBalance()
 }
 
+func (acc *Account) RemoveTransaction(tr *Transaction) {
+	for i, t := range acc.Transactions {
+		if t == *tr {
+			acc.Transactions = append(acc.Transactions[:i], acc.Transactions[i+1:]...)
+		}
+	}
+	
+	acc.UpdateCurrentBalance()
+}
+
 func (acc *Account) UpdateCurrentBalance() {
 	i := sort.Search(len(acc.Transactions), func (i int) bool {
 		return acc.anchorTime.After(acc.Transactions[i].Date)
 	})
 
 	affectingTransactions := acc.Transactions[:i]
-	fmt.Println(affectingTransactions)
-	fmt.Println(i)
 	bal := acc.anchorBalance
 	for _, t := range affectingTransactions {
 		bal += t.Amount
 	}
 
 	acc.CurrentBalance = bal
-	fmt.Printf("New balance $%.2f\n", bal)
 }

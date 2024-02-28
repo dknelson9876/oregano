@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"strconv"
+
 	// "context"
 	"errors"
 	"fmt"
@@ -27,7 +28,7 @@ func main() {
 	// disable some of the things that log prints by default
 	log.SetFlags(0)
 	// TODO: change log level based on command line flags
-	olog := ocli.NewOLogger(ocli.DebugDetail)
+	olog := ocli.NewOLogger(ocli.Debug)
 	oview := ocli.NewOViewPlain(false)
 
 	// Wait for new line to take real action
@@ -221,6 +222,9 @@ func main() {
 		case "remove", "rm":
 			validFlags := map[string]int{
 				"<>": 1,
+				"-t": 0,
+				"-w": 0,
+				"-c": 0,
 			}
 
 			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
@@ -231,9 +235,42 @@ func main() {
 				continue
 			}
 
+			flag := "working"
+			var tr *omoney.Transaction
+			var acc *omoney.Account
+
+			if _, ok := flags["-c"]; ok {
+				flag = "account"
+			}
+
 			input := flags["<>"][0]
-			log.Printf("Removing institution %s\n", input)
-			err = model.RemoveAcount(input)
+			if flag == "working" {
+				item, err := fromWorkingList(input, workingList)
+				if err != nil {
+					log.Printf("Could not find item in working list.\nError: %s\n", err)
+					continue
+				}
+				if transaction, ok := item.(*omoney.Transaction); ok {
+					log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
+					tr = transaction
+				} else if account, ok := item.(*omoney.Account); ok {
+					log.Printf("Pulled account %s from working list\n", account.Alias)
+					acc = account
+				}
+			}
+
+			if flag == "working" && tr != nil {
+				log.Printf("Removing transaction %s\n", input)
+				model.RemoveTransaction(tr)
+
+			} else if flag == "account" || (flag == "working" && acc != nil) {
+				log.Printf("Removing account %s\n", input)
+				if acc != nil {
+					input = acc.Id
+				}
+				err = model.RemoveAccount(input)
+			}
+
 			if err != nil {
 				log.Println(err)
 			} else {
@@ -254,7 +291,6 @@ func main() {
 				continue
 			}
 
-			fmt.Println(flags)
 			input := flags["<>"][0]
 			if anchor, ok := flags["-a"]; ok {
 				err = model.SetAnchor(input, anchor)
@@ -361,26 +397,24 @@ func main() {
 			_, long := flags["-l"]
 			arg := flags["<>"][0]
 
-			idx, err := strconv.Atoi(arg)
+			v, err := fromWorkingList(arg, workingList)
 			if err != nil {
-				log.Printf("Error: parsed token %s as arg, but could not parse it into an index\n", arg)
+				log.Printf("Error: %s\n", err)
 				continue
 			}
 
-			if idx < len(workingList) {
-				switch v := workingList[idx].(type) {
-				default:
-					fmt.Printf("%v\n", v)
-				case *omoney.Transaction:
-					ops := ocli.ShowTransactionOptions{}
-					if long {
-						ops.ShowId = true
-						ops.ShowCategory = true
-						ops.ShowInstDesc = true
-						ops.ShowDesc = true
-					}
-					oview.ShowTransaction(*v, ops)
+			switch t := v.(type) {
+			default:
+				fmt.Printf("%v\n", v)
+			case *omoney.Transaction:
+				ops := ocli.ShowTransactionOptions{}
+				if long {
+					ops.ShowId = true
+					ops.ShowCategory = true
+					ops.ShowInstDesc = true
+					ops.ShowDesc = true
 				}
+				oview.ShowTransaction(*t, ops)
 			}
 
 		case "new":
@@ -520,6 +554,15 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 		log.Fatalln(err)
 	}
 
+}
+
+func fromWorkingList(input string, workingList []interface{}) (interface{}, error) {
+	i, err := strconv.Atoi(input)
+	if err != nil || i >= len(workingList) {
+		return nil, fmt.Errorf("%s is not a valid index", input)
+	}
+
+	return workingList[i], nil
 }
 
 func DetectRegion() ([]string, string) {
