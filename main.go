@@ -404,24 +404,22 @@ func main() {
 			case "transaction", "tr":
 				// new tr [acc] [payee] [amount] (date) (cat)
 				//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
-				validFlags := map[string]int {
-					"<>": 3,
-					"-t": 1,
-					"-c": 1,
-					"-d": 1,
+				if len(tokens) < 3 {
+					log.Printf("Error: command 'new transaction' requires more arguments\n")
+					log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
+					continue
 				}
 
-				str, _ := shlex.Split(strings.Join(tokens[2:], " "))
-				flags, err := ocli.ParseTokensToFlags(str, validFlags)
+				if !model.IsValidAccount(tokens[1]) {
+					log.Printf("Error: bad account %s\n", tokens[1])
+					continue
+				}
+
+				str, _ := shlex.Split(strings.Join(tokens[1:], " "))
 				if err != nil {
 					log.Println("Fail to parse 'new tr' command")
 					log.Println("Usage: new acc [account] [payee] [amount] (options)")
 					log.Println("Use 'help new' for details")
-					continue
-				}
-
-				if !model.IsValidAccount(flags["<>"][0]) {
-					log.Printf("Error: %s\n", err)
 					continue
 				}
 
