@@ -26,6 +26,8 @@ import (
 
 var (
 	workingList []interface{}
+	oview       *ocli.OViewPlain
+	model       *omoney.Model
 )
 
 func main() {
@@ -33,7 +35,7 @@ func main() {
 	log.SetFlags(0)
 	// TODO: change log level based on command line flags
 	olog := ocli.NewOLogger(ocli.Debug)
-	oview := ocli.NewOViewPlain(false)
+	oview = ocli.NewOViewPlain(false)
 
 	// Wait for new line to take real action
 	reader := bufio.NewReader(os.Stdin)
@@ -45,8 +47,9 @@ func main() {
 	viper.SetDefault("oregano.data_dir", filepath.Join(dirname, ".config", "oregano"))
 
 	// Load stored tokens and aliases
+	var err error
 	dataDir := viper.GetString("oregano.data_dir")
-	model, err := ocli.LoadModel(dataDir)
+	model, err = ocli.LoadModel(dataDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {
@@ -206,340 +209,370 @@ func main() {
 				log.Println("link is unavailable while Plaid integration is disabled")
 			}
 		case "list", "ls":
-			ops := ocli.ShowAccountOptions{ShowType: true}
-			if len(tokens) > 1 {
-				validFlags := map[string]int{
-					"-l": 0, // long (detailed)
-				}
-
-				flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-				if err != nil {
-					log.Println("Fail to parse 'ls' command")
-					log.Println("Usage: ls (flags)")
-					log.Println("Use 'help ls' for flags")
-				}
-
-				if _, ok := flags["-l"]; ok {
-					ops.ShowId = true
-					ops.ShowAnchor = true
-				}
-			}
-
-			oview.ShowAccounts(maps.Values(model.Accounts), ops)
-
+			listCmd(tokens)
 		case "alias":
-			validFlags := map[string]int{
-				"<>": 2,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'alias' command")
-				log.Println("Usage: alias [id] [alias]")
-				log.Println("Use 'help alias' for details")
-				continue
-			}
-
-			err = model.SetAlias(flags["<>"][0], flags["<>"][1])
-			if err != nil {
-				log.Printf("Error: %s\n", err)
-			} else {
-				ocli.Save(model)
-			}
-
+			aliasCmd(tokens)
 		case "remove", "rm":
-			validFlags := map[string]int{
-				"<>": 1,
-				"-t": 0,
-				"-w": 0,
-				"-c": 0,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'rm' command")
-				log.Println("Usage: rm [alias/id]")
-				log.Println("Use 'help remove' for details")
-				continue
-			}
-
-			flag := "working"
-			var tr *omoney.Transaction
-			var acc *omoney.Account
-
-			if _, ok := flags["-c"]; ok {
-				flag = "account"
-			} else if _, ok := flags["-t"]; ok {
-				flag = "transaction"
-				log.Println("ERROR: Removing by transaction id not yet implemented")
-				continue
-			}
-
-			input := flags["<>"][0]
-			if flag == "working" {
-				item, err := fromWorkingList(input, workingList)
-				if err != nil {
-					log.Printf("Could not find item in working list.\nError: %s\n", err)
-					continue
-				}
-
-				if transaction, ok := item.(*omoney.Transaction); ok {
-					log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
-					tr = transaction
-				} else if account, ok := item.(*omoney.Account); ok {
-					log.Printf("Pulled account %s from working list\n", account.Alias)
-					acc = account
-				}
-			}
-
-			if flag == "working" && tr != nil {
-				log.Printf("Removing transaction %s\n", input)
-				err = model.RemoveTransaction(tr)
-
-			} else if flag == "account" || (flag == "working" && acc != nil) {
-				log.Printf("Removing account %s\n", input)
-				if acc != nil {
-					input = acc.Id
-				}
-				err = model.RemoveAccount(input)
-			}
-
-			if err != nil {
-				log.Println(err)
-			} else {
-				ocli.Save(model)
-			}
-
+			removeCmd(tokens)
 		case "account", "acc":
-			validFlags := map[string]int{
-				"<>": 1,
-				"-a": 2,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'acc' command")
-				log.Println("Usage: acc [alias/id]")
-				log.Println("Use 'help account' for details")
-				continue
-			}
-
-			input := flags["<>"][0]
-			if anchor, ok := flags["-a"]; ok {
-				err = model.SetAnchor(input, anchor)
-				if err != nil {
-					log.Printf("Error: %s\n", err)
-				} else {
-					ocli.Save(model)
-				}
-				continue
-			}
-
-			acc, err := model.GetAccount(input)
-			if err != nil {
-				log.Printf("Error: %s\n", err)
-				continue
-			}
-			if acc.PlaidToken == "" {
-				// account was manually created
-				oview.ShowAccount(acc)
-			} else {
-				log.Println("Details about Plaid accounts has been manually disabled")
-				// Not sure where to move this code for now
-				// I guess I might end up making some kind of
-				// Plaid-compatibility layer for snippets like this
-				// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
-				// 	*plaid.NewAccountsGetRequest(token),
-				// ).Execute()
-				// if err != nil {
-				// 	log.Println(err)
-				// 	continue
-				// }
-				// oview.ShowPlaidAccounts(resp.GetAccounts())
-			}
-
+			accountCmd(tokens)
 		case "transactions", "trs":
-			validFlags := map[string]int{
-				"<>": 1,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'trs' command")
-				log.Println("Usage: trs [alias/id]")
-				log.Println("Use 'help transactions' for details")
-				continue
-			}
-
-			input := flags["<>"][0]
-			acc, err := model.GetAccount(input)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-
-			// TODO add flag for date range of transactions
-
-			// Limit printed transactions to 10
-			// TODO add flag to print specific number of transactions
-			var showList []*omoney.Transaction
-			if len(acc.Transactions) > 10 {
-				showList = acc.Transactions[:10]
-			} else {
-				showList = acc.Transactions
-			}
-
-			invert := acc.Type != omoney.CreditCard
-			oview.ShowTransactions(showList, invert, len(workingList))
-
-			for i := range showList {
-				workingList = append(workingList, showList[i])
-			}
-
+			transactionsCmd(tokens)
 		case "import":
-			validFlags := map[string]int{
-				"<>": 1,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'import' command")
-				log.Println("Usage: import [filename]")
-				log.Println("Use 'help import' for details")
-				continue
-			}
-
-			input := flags["<>"][0]
-			newTrans := ocli.ReadCsv(input, model.Aliases)
-			for _, tr := range newTrans {
-				model.AddTransaction(tr)
-			}
-			err = ocli.Save(model)
-			if err != nil {
-				log.Fatalln(err)
-			}
-
+			importCmd(tokens)
 		case "print", "p":
-			// -l	long (detailed)
-			validFlags := map[string]int{
-				"<>": 1,
-				"-l": 0,
-			}
-
-			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-			if err != nil {
-				log.Println("Fail to parse 'import' command")
-				log.Println("Usage: import [filename]")
-				log.Println("Use 'help import' for details")
-				continue
-			}
-
-			_, long := flags["-l"]
-			arg := flags["<>"][0]
-
-			v, err := fromWorkingList(arg, workingList)
-			if err != nil {
-				log.Printf("Error: %s\n", err)
-				continue
-			}
-
-			switch t := v.(type) {
-			default:
-				fmt.Printf("%v\n", v)
-			case *omoney.Transaction:
-				ops := ocli.ShowTransactionOptions{}
-				if long {
-					ops.ShowId = true
-					ops.ShowCategory = true
-					ops.ShowInstDesc = true
-					ops.ShowDesc = true
-				}
-				oview.ShowTransaction(*t, ops)
-			}
-
+			printCmd(tokens)
 		case "repair":
 			model.RepairAccounts()
 			ocli.Save(model)
-
 		case "new":
-			if len(tokens) < 2 {
-				log.Printf("Error: command 'new' requires more arguments\n")
-				continue
-			}
-
-			tokens := tokens[1:]
-
-			switch tokens[0] {
-			case "account", "acc":
-				validFlags := map[string]int{
-					"<>": 2,
-				}
-
-				flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-				if err != nil {
-					log.Println("Fail to parse 'new acc' command")
-					log.Println("Usage: new acc [alias] [type]")
-					log.Println("Use 'help new' for details")
-					continue
-				}
-
-				acc := ocli.CreateManualAccount(flags["<>"])
-				if acc == nil {
-					log.Println("Error making new manual account")
-					continue
-				}
-				model.AddAccount(*acc)
-				err = ocli.Save(model)
-				if err != nil {
-					log.Fatalln(err)
-				}
-			case "transaction", "tr":
-				// new tr [acc] [payee] [amount] (date) (cat)
-				//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
-				if len(tokens) < 3 {
-					log.Printf("Error: command 'new transaction' requires more arguments\n")
-					log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
-					continue
-				}
-
-				if !model.IsValidAccount(tokens[1]) {
-					log.Printf("Error: bad account %s\n", tokens[1])
-					continue
-				}
-
-				str, err := shlex.Split(strings.Join(tokens[1:], " "))
-				if err != nil {
-					log.Println("Fail to parse 'new tr' command")
-					log.Println("Usage: new acc [account] [payee] [amount] (options)")
-					log.Println("Use 'help new' for details")
-					continue
-				}
-
-				tr := ocli.CreateManualTransaction(str)
-				if tr == nil {
-					log.Println("Error making new manual transaction")
-					continue
-				}
-
-				// transaction is purposely handled by model and not
-				// account because I intend to later add an always
-				// up to date budget model
-				model.AddTransaction(tr)
-				log.Printf("Saving new transaction %+v\n", tr)
-				err = ocli.Save(model)
-				if err != nil {
-					log.Fatalln(err)
-				}
-			default:
-				log.Printf("Error: unknown subcommand %s\n", tokens[1])
-				log.Println("Valid subcommands are: account, transaction")
-			}
+			newCmd(tokens)
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
 		}
 
 	}
 
+}
+
+func listCmd(tokens []string) {
+	ops := ocli.ShowAccountOptions{ShowType: true}
+	if len(tokens) > 1 {
+		validFlags := map[string]int{
+			"-l": 0, // long (detailed)
+		}
+
+		flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+		if err != nil {
+			log.Println("Fail to parse 'ls' command")
+			log.Println("Usage: ls (flags)")
+			log.Println("Use 'help ls' for flags")
+		}
+
+		if _, ok := flags["-l"]; ok {
+			ops.ShowId = true
+			ops.ShowAnchor = true
+		}
+	}
+
+	oview.ShowAccounts(maps.Values(model.Accounts), ops)
+}
+
+func aliasCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 2,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'alias' command")
+		log.Println("Usage: alias [id] [alias]")
+		log.Println("Use 'help alias' for details")
+		return
+	}
+
+	err = model.SetAlias(flags["<>"][0], flags["<>"][1])
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+	} else {
+		ocli.Save(model)
+	}
+
+}
+
+func removeCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+		"-t": 0,
+		"-w": 0,
+		"-c": 0,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'rm' command")
+		log.Println("Usage: rm [alias/id]")
+		log.Println("Use 'help remove' for details")
+		return
+	}
+
+	flag := "working"
+	var tr *omoney.Transaction
+	var acc *omoney.Account
+
+	if _, ok := flags["-c"]; ok {
+		flag = "account"
+	} else if _, ok := flags["-t"]; ok {
+		flag = "transaction"
+		log.Println("ERROR: Removing by transaction id not yet implemented")
+		return
+	}
+
+	input := flags["<>"][0]
+	if flag == "working" {
+		item, err := fromWorkingList(input, workingList)
+		if err != nil {
+			log.Printf("Could not find item in working list.\nError: %s\n", err)
+			return
+		}
+
+		if transaction, ok := item.(*omoney.Transaction); ok {
+			log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
+			tr = transaction
+		} else if account, ok := item.(*omoney.Account); ok {
+			log.Printf("Pulled account %s from working list\n", account.Alias)
+			acc = account
+		}
+	}
+
+	if flag == "working" && tr != nil {
+		log.Printf("Removing transaction %s\n", input)
+		err = model.RemoveTransaction(tr)
+
+	} else if flag == "account" || (flag == "working" && acc != nil) {
+		log.Printf("Removing account %s\n", input)
+		if acc != nil {
+			input = acc.Id
+		}
+		err = model.RemoveAccount(input)
+	}
+
+	if err != nil {
+		log.Println(err)
+	} else {
+		ocli.Save(model)
+	}
+
+}
+
+func accountCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+		"-a": 2,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'acc' command")
+		log.Println("Usage: acc [alias/id]")
+		log.Println("Use 'help account' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	if anchor, ok := flags["-a"]; ok {
+		err = model.SetAnchor(input, anchor)
+		if err != nil {
+			log.Printf("Error: %s\n", err)
+		} else {
+			ocli.Save(model)
+		}
+		return
+	}
+
+	acc, err := model.GetAccount(input)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return
+	}
+	if acc.PlaidToken == "" {
+		// account was manually created
+		oview.ShowAccount(acc)
+	} else {
+		log.Println("Details about Plaid accounts has been manually disabled")
+		// Not sure where to move this code for now
+		// I guess I might end up making some kind of
+		// Plaid-compatibility layer for snippets like this
+		// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
+		// 	*plaid.NewAccountsGetRequest(token),
+		// ).Execute()
+		// if err != nil {
+		// 	log.Println(err)
+		// 	return
+		// }
+		// oview.ShowPlaidAccounts(resp.GetAccounts())
+	}
+
+}
+
+func transactionsCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'trs' command")
+		log.Println("Usage: trs [alias/id]")
+		log.Println("Use 'help transactions' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	acc, err := model.GetAccount(input)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// TODO add flag for date range of transactions
+
+	// Limit printed transactions to 10
+	// TODO add flag to print specific number of transactions
+	var showList []*omoney.Transaction
+	if len(acc.Transactions) > 10 {
+		showList = acc.Transactions[:10]
+	} else {
+		showList = acc.Transactions
+	}
+
+	invert := acc.Type != omoney.CreditCard
+	oview.ShowTransactions(showList, invert, len(workingList))
+
+	for i := range showList {
+		workingList = append(workingList, showList[i])
+	}
+
+}
+
+func importCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'import' command")
+		log.Println("Usage: import [filename]")
+		log.Println("Use 'help import' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	newTrans := ocli.ReadCsv(input, model.Aliases)
+	for _, tr := range newTrans {
+		model.AddTransaction(tr)
+	}
+	err = ocli.Save(model)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+}
+
+func printCmd(tokens []string) {
+	// -l	long (detailed)
+	validFlags := map[string]int{
+		"<>": 1,
+		"-l": 0,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'import' command")
+		log.Println("Usage: import [filename]")
+		log.Println("Use 'help import' for details")
+		return
+	}
+
+	_, long := flags["-l"]
+	arg := flags["<>"][0]
+
+	v, err := fromWorkingList(arg, workingList)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return
+	}
+
+	switch t := v.(type) {
+	default:
+		fmt.Printf("%v\n", v)
+	case *omoney.Transaction:
+		ops := ocli.ShowTransactionOptions{}
+		if long {
+			ops.ShowId = true
+			ops.ShowCategory = true
+			ops.ShowInstDesc = true
+			ops.ShowDesc = true
+		}
+		oview.ShowTransaction(*t, ops)
+	}
+
+}
+
+func newCmd(tokens []string) {
+	if len(tokens) < 2 {
+		log.Printf("Error: command 'new' requires more arguments\n")
+		return
+	}
+
+	tokens = tokens[1:]
+
+	switch tokens[0] {
+	case "account", "acc":
+		validFlags := map[string]int{
+			"<>": 2,
+		}
+
+		flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+		if err != nil {
+			log.Println("Fail to parse 'new acc' command")
+			log.Println("Usage: new acc [alias] [type]")
+			log.Println("Use 'help new' for details")
+			return
+		}
+
+		acc := ocli.CreateManualAccount(flags["<>"])
+		if acc == nil {
+			log.Println("Error making new manual account")
+			return
+		}
+		model.AddAccount(*acc)
+		err = ocli.Save(model)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	case "transaction", "tr":
+		// new tr [acc] [payee] [amount] (date) (cat)
+		//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
+		if len(tokens) < 3 {
+			log.Printf("Error: command 'new transaction' requires more arguments\n")
+			log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
+			return
+		}
+
+		if !model.IsValidAccount(tokens[1]) {
+			log.Printf("Error: bad account %s\n", tokens[1])
+			return
+		}
+
+		str, err := shlex.Split(strings.Join(tokens[1:], " "))
+		if err != nil {
+			log.Println("Fail to parse 'new tr' command")
+			log.Println("Usage: new acc [account] [payee] [amount] (options)")
+			log.Println("Use 'help new' for details")
+			return
+		}
+
+		tr := ocli.CreateManualTransaction(str)
+		if tr == nil {
+			log.Println("Error making new manual transaction")
+			return
+		}
+
+		// transaction is purposely handled by model and not
+		// account because I intend to later add an always
+		// up to date budget model
+		model.AddTransaction(tr)
+		log.Printf("Saving new transaction %+v\n", tr)
+		err = ocli.Save(model)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	default:
+		log.Printf("Error: unknown subcommand %s\n", tokens[1])
+		log.Println("Valid subcommands are: account, transaction")
+	}
 }
 
 func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries []string, lang string) {
