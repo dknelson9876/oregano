@@ -141,15 +141,41 @@ func main() {
 		case "h", "help":
 			if len(tokens) == 2 {
 				switch tokens[1] {
-				case "new":
-					log.Println("new - manually create account or transaction\n" +
-						"* new account [alias] [type]\t\tcreate a new manual account\n" +
-						"* new transaction []...\t\t TODO")
+				case "link":
+					log.Println("link - link a new institution (Opens in a new browser tab)")
+					log.Println("\tOpens a new browser tab to go through the")
+					log.Println("\tPlaid account linking process")
+					log.Println("usage: link")
 					continue
 				case "ls", "list":
-					log.Println("ls - list all known accounts")
+					log.Println("list - list all known accounts")
 					log.Println("usage: ls (options)")
 					log.Println("\t-l\t(long) Show more details about each account")
+					continue
+				case "alias":
+					log.Println("alias - Assign a new alias to an account")
+					log.Println("\tAssigns the alias [alias] as the alias of ")
+					log.Println("\tthe account with id [id]")
+					log.Println("\tFind an account's id using `ls -l` or `acc`")
+					log.Println("usage: alias [id] [alias]")
+					continue
+				case "rm", "remove":
+					log.Println("remove - Remove an account or transaction")
+					log.Println("\tSpecify the working id (wid) or actual id")
+					log.Println("\tof a transaction or account. If no flag")
+					log.Println("\tis provided, the provided id is assumed to")
+					log.Println("\tbe a wid")
+					log.Println("usage: rm (options) [id]")
+					log.Println("\t-w\t(working) Provided id is a working id")
+					log.Println("\t-t\t(transaction) Provided id is a transaction id")
+					log.Println("\t\t\t TODO not implemented")
+					log.Println("\t-c\t(account) Provided id is an account id")
+
+					continue
+				case "new":
+					log.Println("new - manually create account or transaction")
+					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
+					log.Println("* new transaction []...\t\t TODO")
 					continue
 				case "acc", "account":
 					log.Println("account - print or edit information about an account\n" +
@@ -163,9 +189,11 @@ func main() {
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
 				"* list (ls)\t\tList linked institutions\n" +
-				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]\n" +
+				"* alias [id] [alias]\tAssign [alias] as the new alias for [id]\n" +
 				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
 				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
+				"* transactions (trs) [alias/id]\t TODO description\n" +
+				"* import [filename]\t TODO description\n" +
 				"* print (p) [argument index]\tPrint more details about something that was output\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
@@ -207,7 +235,7 @@ func main() {
 			flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
 			if err != nil {
 				log.Println("Fail to parse 'alias' command")
-				log.Println("Usage: alias [token] [alias]")
+				log.Println("Usage: alias [id] [alias]")
 				log.Println("Use 'help alias' for details")
 				continue
 			}
@@ -241,6 +269,10 @@ func main() {
 
 			if _, ok := flags["-c"]; ok {
 				flag = "account"
+			} else if _, ok := flags["-t"]; ok {
+				flag = "transaction"
+				log.Println("ERROR: Removing by transaction id not yet implemented")
+				continue
 			}
 
 			input := flags["<>"][0]
@@ -250,6 +282,7 @@ func main() {
 					log.Printf("Could not find item in working list.\nError: %s\n", err)
 					continue
 				}
+
 				if transaction, ok := item.(*omoney.Transaction); ok {
 					log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
 					tr = transaction
@@ -261,6 +294,7 @@ func main() {
 
 			if flag == "working" && tr != nil {
 				log.Printf("Removing transaction %s\n", input)
+				//TODO make RemoveTransaction return an err to be consistent
 				model.RemoveTransaction(tr)
 
 			} else if flag == "account" || (flag == "working" && acc != nil) {
@@ -339,21 +373,26 @@ func main() {
 			input := flags["<>"][0]
 			acc, err := model.GetAccount(input)
 			if err != nil {
-				log.Fatalln(err)
+				log.Println(err)
+				continue
 			}
 
-			var sl []omoney.Transaction
+			// TODO add flag for date range of transactions
+
+			// Limit printed transactions to 10
+			// TODO add flag to print specific number of transactions
+			var showList []omoney.Transaction
 			if len(acc.Transactions) > 10 {
-				sl = acc.Transactions[:10]
+				showList = acc.Transactions[:10]
 			} else {
-				sl = acc.Transactions
+				showList = acc.Transactions
 			}
 
 			invert := acc.Type != omoney.CreditCard
-			oview.ShowTransactions(sl, invert, len(workingList))
+			oview.ShowTransactions(showList, invert, len(workingList))
 
-			for i := range sl {
-				workingList = append(workingList, &sl[i])
+			for i := range showList {
+				workingList = append(workingList, &showList[i])
 			}
 
 		case "import":
