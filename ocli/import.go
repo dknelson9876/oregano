@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/dknelson9876/oregano/omoney"
 	"github.com/erikgeiser/promptkit/confirmation"
 	"github.com/erikgeiser/promptkit/selection"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -28,7 +28,9 @@ const (
 	sDir           = "Direction (Debit/Credit)"
 )
 
-func ReadCsv(filepath string, existingAccounts []string) []*omoney.Transaction{
+// Given the path to a csv file, and the map existingAccounts of alias -> id,
+// interactively parse the csv file into a slice of transaction structs
+func ReadCsv(filepath string, existingAccounts map[string]string) []*omoney.Transaction {
 	f, err := os.Open(filepath)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
@@ -117,7 +119,7 @@ func ReadCsv(filepath string, existingAccounts []string) []*omoney.Transaction{
 	}
 	fmt.Println("Processing...")
 
-	accMap := make(map[string]string, 0) // name in csv -> alias in model
+	accMap := make(map[string]string, 0) // name in csv -> accountId in model
 	newTrans := make([]*omoney.Transaction, 0)
 
 	var recordsRange [][]string
@@ -135,30 +137,39 @@ func ReadCsv(filepath string, existingAccounts []string) []*omoney.Transaction{
 			continue
 		}
 
-		// if transaction for this account is not a registered account,
-		if !slices.Contains(existingAccounts, tr.Account) {
-			if matchedAcc, ok := accMap[tr.Account]; ok {
+		// if account for this transaction is not a registered account,
+		// if !slices.Contains(existingAccounts, tr.Account) {
+		if id, ok := existingAccounts[tr.AccountId]; ok {
+			// if account from file is a known account alias, convert it to the ID
+			tr.AccountId = id
+
+		} else if !mapContains(existingAccounts, tr.AccountId) {
+			// if account from file is a known account ID, no action needs to be taken
+			// else, query the user for which account to use
+			if matchedAcc, ok := accMap[tr.AccountId]; ok {
 				// if a known match exists, change it to that match
-				tr.Account = matchedAcc
+				tr.AccountId = matchedAcc
+
 			} else {
 				// else ask what the match should be, store it, and set it
 				keymap := selection.NewDefaultKeyMap()
 				keymap.Up = append(keymap.Up, "k")
 				keymap.Down = append(keymap.Down, "j")
 
-				fmt.Printf("Account matching '%s' doesn't match known accounts. Please select the existing account that matches\n", tr.Account)
-				sel := selection.New("", existingAccounts)
+				fmt.Printf("Account matching '%s' doesn't match known accounts. Please select the existing account that matches\n", tr.AccountId)
+				sel := selection.New("", maps.Keys(existingAccounts))
 				sel.Filter = nil
 				sel.KeyMap = keymap
 
-				response, err := sel.RunPrompt()
+				chosenAlias, err := sel.RunPrompt()
 				if err != nil {
 					fmt.Println("Import canceled")
 					return nil
 				}
 
-				accMap[tr.Account] = response
-				tr.Account = response
+				chosenId := existingAccounts[chosenAlias]
+				accMap[tr.AccountId] = chosenId
+				tr.AccountId = chosenId
 			}
 		}
 
@@ -221,12 +232,16 @@ func buildColumnMap(records [][]string, headers bool) (map[string]int, error) {
 	return colMap, nil
 }
 
+// Given a slice of string tokens from an input file and a map of indicating
+// which column belongs to which transaction field, build a new transaction struct
+//
+// NOTE: Transaction.AccountId inside the returned value is unverified, and may be
+// an existing alias, id, or not exist.
 func tryBuildTransaction(record []string, colMap map[string]int) (*omoney.Transaction, error) {
 
-	var accName string
+	var accStr string
 	if accCol, ok := colMap[sAccount]; ok {
-		//TODO: check that account actually exists
-		accName = record[accCol]
+		accStr = record[accCol]
 	} else {
 		return nil, errors.New("missing required field 'Account'")
 	}
@@ -287,7 +302,16 @@ func tryBuildTransaction(record []string, colMap map[string]int) (*omoney.Transa
 		mul = 1
 	}
 
-	return omoney.NewTransaction(accName, payee, amount*mul, ops...), nil
+	return omoney.NewTransaction(accStr, payee, amount*mul, ops...), nil
+}
+
+func mapContains(m map[string]string, val string) bool {
+	for _, v := range m {
+		if v == val {
+			return true
+		}
+	}
+	return false
 }
 
 func removeElement(s []string, element string) []string {

@@ -15,7 +15,7 @@ type Transaction struct {
 	UUID string
 	// The account belonging to the user which the money
 	// is being pulled from. Required field. Assumed to be a valid alias
-	Account string
+	AccountId string
 	// The 'account' which money is being sent to, typically
 	// a business. Required field.
 	Payee string
@@ -46,11 +46,11 @@ type Transaction struct {
 
 type TransactionOption func(*Transaction)
 
-func NewTransaction(account string, payee string, amount float64,
+func NewTransaction(accountId string, payee string, amount float64,
 	options ...TransactionOption) *Transaction {
 	tr := &Transaction{
 		UUID:    uuid.New().String(),
-		Account: account,
+		AccountId: accountId,
 		Payee:   payee,
 		Amount:  amount,
 		Date:    time.Now(),
@@ -89,7 +89,7 @@ func (t *Transaction) LooseEquals(other *Transaction) bool {
 	//TODO: do more research on comparing dates
 	return t.Date.Equal(other.Date) &&
 		t.Amount == other.Amount &&
-		t.Account == other.Account &&
+		t.AccountId == other.AccountId &&
 		t.Payee == other.Payee &&
 		t.Category == other.Category &&
 		t.Description == other.Description
@@ -98,7 +98,7 @@ func (t *Transaction) LooseEquals(other *Transaction) bool {
 func (t *Transaction) String() string {
 	return fmt.Sprintf("ID: %s\nAcc: %s\nPayee: %s\nAmount: %.2f\nDate: %s\nCategory: %s\nInstDescription: %s\nDescription: %s",
 		t.UUID,
-		t.Account,
+		t.AccountId,
 		t.Payee,
 		t.Amount,
 		t.Date.Format("2006/01/02"),

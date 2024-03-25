@@ -78,6 +78,15 @@ func (m *Model) RemoveAccount(input string) error {
 	return fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
 }
 
+// iterate over accounts, ensuring consistency in data
+func (m *Model) RepairAccounts() {
+	// Repair List:
+	// - Set Account ID within transactions to match account it's stored in
+	for _, acc := range m.Accounts {
+		acc.RepairTransactions()
+	}
+}
+
 // TODO: be sure to save the model after calling this method
 func (m *Model) SetAlias(id string, alias string) error {
 	var acc Account
@@ -115,16 +124,15 @@ func (m *Model) SetAnchor(account string, anchor []string) error {
 	return nil
 }
 
-func (m *Model) AddTransaction(tr Transaction) {
-	id := m.Aliases[tr.Account]
-	acc := m.Accounts[id]
+func (m *Model) AddTransaction(tr *Transaction) {
+	acc := m.Accounts[tr.AccountId]
 	acc.AddTransaction(tr)
-	m.Accounts[id] = acc
+	m.Accounts[tr.AccountId] = acc
 }
 
-func (m *Model) RemoveTransaction(tr *Transaction) {
-	id := m.Aliases[tr.Account]
-	acc := m.Accounts[id]
-	acc.RemoveTransaction(tr)
-	m.Accounts[id] = acc
+func (m *Model) RemoveTransaction(tr *Transaction) error {
+	acc := m.Accounts[tr.AccountId]
+	err := acc.RemoveTransaction(tr)
+	m.Accounts[tr.AccountId] = acc
+	return err
 }

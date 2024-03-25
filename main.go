@@ -195,6 +195,7 @@ func main() {
 				"* transactions (trs) [alias/id]\t TODO description\n" +
 				"* import [filename]\t TODO description\n" +
 				"* print (p) [argument index]\tPrint more details about something that was output\n" +
+				"* repair\t\tUsing higher level data as authoritative, correct inconsistencies\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
@@ -294,8 +295,7 @@ func main() {
 
 			if flag == "working" && tr != nil {
 				log.Printf("Removing transaction %s\n", input)
-				//TODO make RemoveTransaction return an err to be consistent
-				model.RemoveTransaction(tr)
+				err = model.RemoveTransaction(tr)
 
 			} else if flag == "account" || (flag == "working" && acc != nil) {
 				log.Printf("Removing account %s\n", input)
@@ -381,7 +381,7 @@ func main() {
 
 			// Limit printed transactions to 10
 			// TODO add flag to print specific number of transactions
-			var showList []omoney.Transaction
+			var showList []*omoney.Transaction
 			if len(acc.Transactions) > 10 {
 				showList = acc.Transactions[:10]
 			} else {
@@ -392,7 +392,7 @@ func main() {
 			oview.ShowTransactions(showList, invert, len(workingList))
 
 			for i := range showList {
-				workingList = append(workingList, &showList[i])
+				workingList = append(workingList, showList[i])
 			}
 
 		case "import":
@@ -409,9 +409,9 @@ func main() {
 			}
 
 			input := flags["<>"][0]
-			newTrans := ocli.ReadCsv(input, maps.Keys(model.Aliases))
+			newTrans := ocli.ReadCsv(input, model.Aliases)
 			for _, tr := range newTrans {
-				model.AddTransaction(*tr)
+				model.AddTransaction(tr)
 			}
 			err = ocli.Save(model)
 			if err != nil {
@@ -455,6 +455,9 @@ func main() {
 				}
 				oview.ShowTransaction(*t, ops)
 			}
+
+		case "repair":
+			model.RepairAccounts()
 
 		case "new":
 			if len(tokens) < 2 {
@@ -502,7 +505,7 @@ func main() {
 					continue
 				}
 
-				str, _ := shlex.Split(strings.Join(tokens[1:], " "))
+				str, err := shlex.Split(strings.Join(tokens[1:], " "))
 				if err != nil {
 					log.Println("Fail to parse 'new tr' command")
 					log.Println("Usage: new acc [account] [payee] [amount] (options)")
@@ -519,7 +522,7 @@ func main() {
 				// transaction is purposely handled by model and not
 				// account because I intend to later add an always
 				// up to date budget model
-				model.AddTransaction(*tr)
+				model.AddTransaction(tr)
 				log.Printf("Saving new transaction %+v\n", tr)
 				err = ocli.Save(model)
 				if err != nil {

@@ -98,7 +98,7 @@ func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	fmt.Println(t)
 }
 
-func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, startIndex int) {
+func (v *OViewPlain) ShowTransactions(trs []*omoney.Transaction, invert bool, startIndex int) {
 	var negAmount int
 	if invert {
 		negAmount = -1
@@ -154,7 +154,7 @@ func (v *OViewPlain) ShowTransaction(tr omoney.Transaction, ops ...ShowTransacti
 		rows = append(rows, fmt.Sprintf("Id: %s", tr.UUID))
 	}
 
-	rows = append(rows, fmt.Sprintf("Account: %s", tr.Account))
+	rows = append(rows, fmt.Sprintf("Account: %s", tr.AccountId))
 	rows = append(rows, fmt.Sprintf("Payee: %s", tr.Payee))
 	rows = append(rows, fmt.Sprintf("Amount: $%.2f", tr.Amount))
 	rows = append(rows, fmt.Sprintf("Date: %s", tr.Date.Format("2006/01/02")))

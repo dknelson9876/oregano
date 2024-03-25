@@ -1,6 +1,7 @@
 package omoney
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -31,7 +32,7 @@ type Account struct {
 	// Defaults to empty string if account was manually created.
 	PlaidToken   string
 	Type         AccountType
-	Transactions []Transaction
+	Transactions []*Transaction
 	// The known value of this account at the time specified
 	// in `AnchorTime`. Optional field that defaults to 0
 	anchorBalance float64
@@ -49,7 +50,7 @@ func NewAccount(options ...AccountOption) *Account {
 	acc := &Account{
 		Id:           uuid.New().String(),
 		Type:         UnknownAccount,
-		Transactions: make([]Transaction, 0),
+		Transactions: make([]*Transaction, 0),
 		anchorTime:   time.Now(),
 	}
 
@@ -121,7 +122,15 @@ func (acc *Account) GetAnchorTime() time.Time {
 	return acc.anchorTime
 }
 
-func (acc *Account) AddTransaction(tr Transaction) {
+func (acc *Account) RepairTransactions() {
+	// Repair List:
+	// - Set Account ID within transactions to match this account
+	for _, tr := range acc.Transactions {
+		tr.AccountId = acc.Id
+	}
+}
+
+func (acc *Account) AddTransaction(tr *Transaction) {
 	acc.Transactions = append(acc.Transactions, tr)
 	sort.Slice(acc.Transactions, func(i, j int) bool {
 		return acc.Transactions[i].Date.After(acc.Transactions[j].Date)
@@ -130,21 +139,27 @@ func (acc *Account) AddTransaction(tr Transaction) {
 	acc.UpdateCurrentBalance()
 }
 
-func (acc *Account) RemoveTransaction(tr *Transaction) {
+func (acc *Account) RemoveTransaction(tr *Transaction) error {
 	for i, t := range acc.Transactions {
-		if t == *tr {
+		if t == tr {
 			acc.Transactions = append(acc.Transactions[:i], acc.Transactions[i+1:]...)
+			acc.UpdateCurrentBalance()
+			return nil
 		}
 	}
-	
-	acc.UpdateCurrentBalance()
+
+	return errors.New("transaction not found")
 }
 
 func (acc *Account) UpdateCurrentBalance() {
-	i := sort.Search(len(acc.Transactions), func (i int) bool {
+	// Find the index of the first transaction that occured
+	// before the anchor time
+	i := sort.Search(len(acc.Transactions), func(i int) bool {
 		return acc.anchorTime.After(acc.Transactions[i].Date)
 	})
 
+	// tally the current balance by iterating over
+	// the transactions that occured since
 	affectingTransactions := acc.Transactions[:i]
 	bal := acc.anchorBalance
 	for _, t := range affectingTransactions {
