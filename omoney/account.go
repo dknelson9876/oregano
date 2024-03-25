@@ -35,10 +35,10 @@ type Account struct {
 	Transactions []*Transaction
 	// The known value of this account at the time specified
 	// in `AnchorTime`. Optional field that defaults to 0
-	anchorBalance float64
+	anchorBalance float64 `json:"AnchorBalance"`
 	// The time specified for the known value `AnchorBalance`.
 	// Optional field that defaults to time.Now()
-	anchorTime time.Time
+	anchorTime time.Time `json:"AnchorTime"`
 	// The calculated current balance of this account
 	CurrentBalance float64
 	// The time at which `CurrentBalance` was last calculated
