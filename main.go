@@ -24,6 +24,10 @@ import (
 	"golang.org/x/text/language"
 )
 
+var (
+	workingList []interface{}
+)
+
 func main() {
 	// disable some of the things that log prints by default
 	log.SetFlags(0)
@@ -117,7 +121,7 @@ func main() {
 	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
-	workingList := make([]interface{}, 0)
+	workingList = make([]interface{}, 0)
 
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
@@ -146,19 +150,16 @@ func main() {
 					log.Println("\tOpens a new browser tab to go through the")
 					log.Println("\tPlaid account linking process")
 					log.Println("usage: link")
-					continue
 				case "ls", "list":
 					log.Println("list - list all known accounts")
 					log.Println("usage: ls (options)")
 					log.Println("\t-l\t(long) Show more details about each account")
-					continue
 				case "alias":
 					log.Println("alias - Assign a new alias to an account")
 					log.Println("\tAssigns the alias [alias] as the alias of ")
 					log.Println("\tthe account with id [id]")
 					log.Println("\tFind an account's id using `ls -l` or `acc`")
 					log.Println("usage: alias [id] [alias]")
-					continue
 				case "rm", "remove":
 					log.Println("remove - Remove an account or transaction")
 					log.Println("\tSpecify the working id (wid) or actual id")
@@ -170,18 +171,16 @@ func main() {
 					log.Println("\t-t\t(transaction) Provided id is a transaction id")
 					log.Println("\t\t\t TODO not implemented")
 					log.Println("\t-c\t(account) Provided id is an account id")
-
-					continue
 				case "new":
 					log.Println("new - manually create account or transaction")
 					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
 					log.Println("* new transaction []...\t\t TODO")
-					continue
 				case "acc", "account":
 					log.Println("account - print or edit information about an account\n" +
 						"Usage: account [alias/id] (options)\n" +
 						"\t-a <amount> <date>\t(anchor) set a known amount at a time to base balance off of")
 				}
+				continue
 			}
 			log.Println("oregano-cli - Terminal budgeting app" +
 				"Commands:\n" +
@@ -330,6 +329,8 @@ func main() {
 				err = model.SetAnchor(input, anchor)
 				if err != nil {
 					log.Printf("Error: %s\n", err)
+				} else {
+					ocli.Save(model)
 				}
 				continue
 			}
@@ -458,6 +459,7 @@ func main() {
 
 		case "repair":
 			model.RepairAccounts()
+			ocli.Save(model)
 
 		case "new":
 			if len(tokens) < 2 {
@@ -538,7 +540,6 @@ func main() {
 
 	}
 
-	//-------
 }
 
 func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries []string, lang string) {
