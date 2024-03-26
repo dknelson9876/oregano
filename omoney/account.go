@@ -35,10 +35,10 @@ type Account struct {
 	Transactions []*Transaction
 	// The known value of this account at the time specified
 	// in `AnchorTime`. Optional field that defaults to 0
-	anchorBalance float64 `json:"AnchorBalance"`
+	AnchorBalance float64 `json:"AnchorBalance"`
 	// The time specified for the known value `AnchorBalance`.
 	// Optional field that defaults to time.Now()
-	anchorTime time.Time `json:"AnchorTime"`
+	AnchorTime time.Time `json:"AnchorTime"`
 	// The calculated current balance of this account
 	CurrentBalance float64
 	// The time at which `CurrentBalance` was last calculated
@@ -51,7 +51,7 @@ func NewAccount(options ...AccountOption) *Account {
 		Id:           uuid.New().String(),
 		Type:         UnknownAccount,
 		Transactions: make([]*Transaction, 0),
-		anchorTime:   time.Now(),
+		AnchorTime:   time.Now(),
 	}
 
 	for _, op := range options {
@@ -76,8 +76,8 @@ func WithAlias(alias string) AccountOption {
 
 func WithAnchor(balance float64, time time.Time) AccountOption {
 	return func(acc *Account) {
-		acc.anchorBalance = balance
-		acc.anchorTime = time
+		acc.AnchorBalance = balance
+		acc.AnchorTime = time
 	}
 }
 
@@ -105,21 +105,21 @@ func ParseAccountType(input string) (AccountType, error) {
 }
 
 func (acc *Account) SetAnchor(balance float64, time time.Time) {
-	acc.anchorBalance = balance
-	acc.anchorTime = time
+	acc.AnchorBalance = balance
+	acc.AnchorTime = time
 	acc.UpdateCurrentBalance()
 }
 
 func (acc *Account) GetAnchor() (float64, time.Time) {
-	return acc.anchorBalance, acc.anchorTime
+	return acc.AnchorBalance, acc.AnchorTime
 }
 
 func (acc *Account) GetAnchorBalance() float64 {
-	return acc.anchorBalance
+	return acc.AnchorBalance
 }
 
 func (acc *Account) GetAnchorTime() time.Time {
-	return acc.anchorTime
+	return acc.AnchorTime
 }
 
 func (acc *Account) RepairTransactions() {
@@ -155,13 +155,13 @@ func (acc *Account) UpdateCurrentBalance() {
 	// Find the index of the first transaction that occured
 	// before the anchor time
 	i := sort.Search(len(acc.Transactions), func(i int) bool {
-		return acc.anchorTime.After(acc.Transactions[i].Date)
+		return acc.AnchorTime.After(acc.Transactions[i].Date)
 	})
 
 	// tally the current balance by iterating over
 	// the transactions that occured since
 	affectingTransactions := acc.Transactions[:i]
-	bal := acc.anchorBalance
+	bal := acc.AnchorBalance
 	for _, t := range affectingTransactions {
 		bal += t.Amount
 	}
