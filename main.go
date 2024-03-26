@@ -174,14 +174,24 @@ func main() {
 					log.Println("\t-t\t(transaction) Provided id is a transaction id")
 					log.Println("\t\t\t TODO not implemented")
 					log.Println("\t-c\t(account) Provided id is an account id")
+				case "acc", "account":
+					log.Println("account - print or edit information about an account")
+					log.Println("Usage: account [alias/id] (options)")
+					log.Println("\t-a <amount> <date>\t(anchor) set a known amount at a time to base balance off of")
+				case "trs", "transactions":
+					log.Println("transactions - list transactions from a specific account")
+					log.Println("usage: trs [id/alias]")
+				case "import":
+					log.Println("import - interactively import transactions from a CSV file")
+					log.Println("usage: import [filepath]")
+				case "p", "print":
+					log.Println("print - print more information about a transaction from the working list")
+					log.Println("usage: p [wid] (options)")
+					log.Println("\t-l\t(long) Show even more details about the transaction")
 				case "new":
 					log.Println("new - manually create account or transaction")
 					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
 					log.Println("* new transaction []...\t\t TODO")
-				case "acc", "account":
-					log.Println("account - print or edit information about an account\n" +
-						"Usage: account [alias/id] (options)\n" +
-						"\t-a <amount> <date>\t(anchor) set a known amount at a time to base balance off of")
 				}
 				continue
 			}
@@ -510,6 +520,7 @@ func newCmd(tokens []string) {
 
 	switch tokens[0] {
 	case "account", "acc":
+		// new acc [alias] [type]
 		validFlags := map[string]int{
 			"<>": 2,
 		}

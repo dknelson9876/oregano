@@ -128,7 +128,7 @@ func (v *OViewPlain) ShowTransactions(trs []*omoney.Transaction, invert bool, st
 				return lipgloss.NewStyle()
 			}
 		}).
-		Headers("", "DATE", "PAYEE", "CATEGORY", "AMOUNT").
+		Headers("WID", "DATE", "PAYEE", "CATEGORY", "AMOUNT").
 		Rows(rows...)
 
 	fmt.Println(t)
