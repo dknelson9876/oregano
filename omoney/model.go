@@ -82,8 +82,10 @@ func (m *Model) RemoveAccount(input string) error {
 func (m *Model) RepairAccounts() {
 	// Repair List:
 	// - Set Account ID within transactions to match account it's stored in
+	// - Recalculate current balance
 	for _, acc := range m.Accounts {
 		acc.RepairTransactions()
+		acc.UpdateCurrentBalance()
 	}
 }
 
