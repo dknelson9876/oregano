@@ -23,14 +23,18 @@ func (m *Model) GetAccount(input string) (Account, error) {
 	}
 }
 
-func (m *Model) IsValidAccount(input string) bool {
-	if _, ok := m.Accounts[input]; ok {
-		return true
-	} else if _, ok := m.Aliases[input]; ok {
-		return true
-	} else {
-		return false
-	}
+func (m *Model) IsValidAccountId(input string) bool {
+	_, ok := m.Accounts[input]
+	return ok
+}
+
+func (m *Model) IsValidAccountAlias(input string) bool {
+	_, ok := m.Aliases[input]
+	return ok
+}
+
+func (m *Model) GetAccountId(alias string) string {
+	return m.Aliases[alias]
 }
 
 // Given an id, returns that id.

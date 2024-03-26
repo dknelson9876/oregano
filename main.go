@@ -380,6 +380,8 @@ func accountCmd(tokens []string) {
 			log.Printf("Error: %s\n", err)
 		} else {
 			ocli.Save(model)
+			acc, _ := model.GetAccount(input)
+			log.Printf("Updated anchor to $%.2f on %s", acc.AnchorBalance, acc.AnchorTime.Format("2006/01/02"))
 		}
 		return
 	}
@@ -557,8 +559,12 @@ func newCmd(tokens []string) {
 			return
 		}
 
-		if !model.IsValidAccount(tokens[1]) {
-			log.Printf("Error: bad account %s\n", tokens[1])
+		// if account is valid alias, replace with ID
+		// else if account is not valid id, error
+		if model.IsValidAccountAlias(tokens[1]) {
+			tokens[1] = model.GetAccountId(tokens[1])
+		} else if !model.IsValidAccountId(tokens[1]) {
+			log.Printf("Error: %s is not a valid account alias or id\n", tokens[1])
 			return
 		}
 
