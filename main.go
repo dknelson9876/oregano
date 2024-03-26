@@ -249,27 +249,74 @@ func main() {
 
 }
 
+//   - if no id is provided, accounts will be listed
+//   - if a string id is provided, it will be assumed to be an account alias
+//     and transactions in that account will be printed
 func listCmd(tokens []string) {
-	ops := ocli.ShowAccountOptions{ShowType: true}
-	if len(tokens) > 1 {
-		validFlags := map[string]int{
-			"-l": 0, // long (detailed)
+	long := false
+	id := ""
+	if len(tokens) == 1 {
+		oview.ShowAccounts(maps.Values(model.Accounts), ocli.ShowAccountOptions{ShowType: true})
+		return
+	} else if len(tokens) > 1 {
+		i := 1
+		for i < len(tokens) {
+			token := tokens[i]
+			//TODO do I prevent account aliases from starting with '-'?
+
+			if strings.HasPrefix(token, "-") {
+				if token == "-l" || token == "--long" {
+					long = true
+					i++
+
+				} else {
+					log.Println("Error: unknown flag")
+					return
+				}
+
+			} else {
+				id = token
+				i++
+			}
 		}
 
-		flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-		if err != nil {
-			log.Println("Fail to parse 'ls' command")
-			log.Println("Usage: ls (flags)")
-			log.Println("Use 'help ls' for flags")
+		if id != "" {
+			// ls BOA (-l)
+			acc, err := model.GetAccount(id)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			// CONTINUE HERE: a lot of todos here
+			// TODO implement -l for listing transactions
+			// TODO implement -n for listing transactions
+			// TODO this has a lot of code in common with transactionsCmd
+
+			var showList []*omoney.Transaction
+			if len(acc.Transactions) > 10 {
+				showList = acc.Transactions[:10]
+			} else {
+				showList = acc.Transactions
+			}
+
+			invert := acc.Type != omoney.CreditCard
+			oview.ShowTransactions(showList, invert, len(workingList))
+
+			for i := range showList {
+				workingList = append(workingList, showList[i])
+			}
+		} else {
+			// `ls (-l)`
+			ops := ocli.ShowAccountOptions{ShowType: true}
+			if long {
+				ops.ShowId = true
+				ops.ShowAnchor = true
+			}
+			oview.ShowAccounts(maps.Values(model.Accounts), ops)
 		}
 
-		if _, ok := flags["-l"]; ok {
-			ops.ShowId = true
-			ops.ShowAnchor = true
-		}
 	}
-
-	oview.ShowAccounts(maps.Values(model.Accounts), ops)
 }
 
 func aliasCmd(tokens []string) {
