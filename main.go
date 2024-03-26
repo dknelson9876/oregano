@@ -133,8 +133,12 @@ func main() {
 		var line string
 		// fmt.Scanln(&line)
 		line, err = reader.ReadString('\n')
-		// tokens, err := shlex.Split(line)
-		tokens := strings.Fields(line)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		tokens, err := shlex.Split(line)
+		// tokens := strings.Fields(line)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -516,6 +520,7 @@ func newCmd(tokens []string) {
 		return
 	}
 
+	// trim 'new' off front of cmd
 	tokens = tokens[1:]
 
 	switch tokens[0] {
@@ -557,15 +562,10 @@ func newCmd(tokens []string) {
 			return
 		}
 
-		str, err := shlex.Split(strings.Join(tokens[1:], " "))
-		if err != nil {
-			log.Println("Fail to parse 'new tr' command")
-			log.Println("Usage: new acc [account] [payee] [amount] (options)")
-			log.Println("Use 'help new' for details")
-			return
-		}
+		// trim 'tr' off front of cmd
+		tokens = tokens[1:]
 
-		tr := ocli.CreateManualTransaction(str)
+		tr := ocli.CreateManualTransaction(tokens)
 		if tr == nil {
 			log.Println("Error making new manual transaction")
 			return
@@ -576,7 +576,7 @@ func newCmd(tokens []string) {
 		// up to date budget model
 		model.AddTransaction(tr)
 		log.Printf("Saving new transaction %+v\n", tr)
-		err = ocli.Save(model)
+		err := ocli.Save(model)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -646,7 +646,7 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 func fromWorkingList(input string, workingList []interface{}) (interface{}, error) {
 	i, err := strconv.Atoi(input)
 	if err != nil || i >= len(workingList) {
-		return nil, fmt.Errorf("%s is not a valid index", input)
+		return nil, fmt.Errorf("%s is not a valid wid", input)
 	}
 
 	return workingList[i], nil
