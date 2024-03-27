@@ -158,9 +158,11 @@ func main() {
 					log.Println("\tPlaid account linking process")
 					log.Println("usage: link")
 				case "ls", "list":
-					log.Println("list - list all known accounts")
-					log.Println("usage: ls (options)")
-					log.Println("\t-l\t(long) Show more details about each account")
+					log.Println("list - list accounts or transactions")
+					log.Println("\tProvide an alias to list transactions under that account,")
+					log.Println("\tor don't provide an alias to list all accounts")
+					log.Println("usage: ls (alias) (options)")
+					log.Println("\t-l\t(long) Show more details")
 				case "alias":
 					log.Println("alias - Assign a new alias to an account")
 					log.Println("\tAssigns the alias [alias] as the alias of ")
@@ -204,7 +206,7 @@ func main() {
 				"* help (h)\t\tPrint this menu\n" +
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
-				"* list (ls)\t\tList linked institutions\n" +
+				"* list (ls)\t\tList accounts or transactions\n" +
 				"* alias [id] [alias]\tAssign [alias] as the new alias for [id]\n" +
 				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
 				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
