@@ -2,10 +2,12 @@ package ocli
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/plaid/plaid-go/plaid"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/dknelson9876/oregano/omoney"
+	"github.com/plaid/plaid-go/plaid"
 )
 
 // Define styles
@@ -30,7 +32,7 @@ func NewOViewPlain(enableColor bool) *OViewPlain {
 	}
 }
 
-func (v *OViewPlain) ShowAccount(account plaid.AccountBase) {
+func (v *OViewPlain) ShowPlaidAccount(account plaid.AccountBase) {
 	// something is up with the way that Nullables are parsed
 	//  and causing Ok's and IsSet's to be true, even when the
 	//  value is nil, so I'm just gonna directly check for nil
@@ -53,7 +55,7 @@ func (v *OViewPlain) ShowAccount(account plaid.AccountBase) {
 	fmt.Println()
 }
 
-func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
+func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	var rows [][]string
 	for _, acc := range accounts {
 		var thisRow []string
@@ -84,7 +86,7 @@ func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			if (col > 1) {
+			if col > 1 {
 				return rightAlignStyle
 			} else {
 				return lipgloss.NewStyle()
@@ -94,4 +96,146 @@ func (v *OViewPlain) ShowAccounts(accounts []plaid.AccountBase) {
 		Rows(rows...)
 
 	fmt.Println(t)
+}
+
+func (v *OViewPlain) ShowTransactions(trs []*omoney.Transaction, invert bool, startIndex int) {
+	var negAmount int
+	if invert {
+		negAmount = -1
+	} else {
+		negAmount = 1
+	}
+
+	var rows [][]string
+	for i, tr := range trs {
+		thisRow := []string{
+			strconv.Itoa(startIndex + i),
+			tr.Date.Format("2006/01/02"),
+			tr.Payee,
+			tr.Category,
+			fmt.Sprintf("$%.2f", tr.Amount*float64(negAmount)),
+		}
+		rows = append(rows, thisRow)
+	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 4 {
+				return rightAlignStyle
+			} else {
+				return lipgloss.NewStyle()
+			}
+		}).
+		Headers("WID", "DATE", "PAYEE", "CATEGORY", "AMOUNT").
+		Rows(rows...)
+
+	fmt.Println(t)
+}
+
+type ShowTransactionOptions struct {
+	ShowId       bool
+	ShowCategory bool
+	ShowInstDesc bool
+	ShowDesc     bool
+}
+
+func (v *OViewPlain) ShowTransaction(tr omoney.Transaction, ops ...ShowTransactionOptions) {
+	rows := make([]string, 0)
+	var op ShowTransactionOptions
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		op = ShowTransactionOptions{}
+	}
+
+	if op.ShowId {
+		rows = append(rows, fmt.Sprintf("Id: %s", tr.UUID))
+	}
+
+	rows = append(rows, fmt.Sprintf("Account: %s", tr.AccountId))
+	rows = append(rows, fmt.Sprintf("Payee: %s", tr.Payee))
+	rows = append(rows, fmt.Sprintf("Amount: $%.2f", tr.Amount))
+	rows = append(rows, fmt.Sprintf("Date: %s", tr.Date.Format("2006/01/02")))
+
+	if op.ShowCategory {
+		rows = append(rows, fmt.Sprintf("Category: %s", tr.Category))
+	}
+
+	if op.ShowInstDesc {
+		rows = append(rows, fmt.Sprintf("Inst Description: %s", tr.InstDescription))
+	}
+
+	if op.ShowDesc {
+		rows = append(rows, fmt.Sprintf("Description: %s", tr.Description))
+	}
+
+	for _, row := range rows {
+		fmt.Println(row)
+	}
+}
+
+type ShowAccountOptions struct {
+	ShowType   bool
+	ShowAnchor bool
+	ShowId     bool
+}
+
+func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountOptions) {
+	rows := make([][]string, len(accounts))
+	var op ShowAccountOptions
+	var headers []string
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		op = ShowAccountOptions{}
+	}
+
+	// always show alias
+	// TODO: Plaid integration may allow accounts without aliases
+	headers = append(headers, "ALIAS")
+	for i, acc := range accounts {
+		rows[i] = append(rows[i], acc.Alias)
+	}
+
+	headers = append(headers, "BALANCE")
+	for i, acc := range accounts {
+		rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
+	}
+
+	if op.ShowType {
+		headers = append(headers, "TYPE")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], string(acc.Type))
+		}
+	}
+
+	if op.ShowAnchor {
+		headers = append(headers, "ANCHOR")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], fmt.Sprintf("($%.2f, %s)",
+				acc.GetAnchorBalance(),
+				acc.GetAnchorTime().Format("2006/01/02")))
+		}
+	}
+
+	if op.ShowId {
+		headers = append(headers, "ID")
+		for i, acc := range accounts {
+			rows[i] = append(rows[i], acc.Id)
+		}
+	}
+
+	t := table.New().Headers(headers...).Rows(rows...)
+	fmt.Println(t)
+}
+
+func (v *OViewPlain) ShowAccount(acc omoney.Account) {
+	fmt.Printf("Id: %s\nAlias: %s\nType: %s\nAnchor: ($%.2f, %s)\n",
+		acc.Id,
+		acc.Alias,
+		acc.Type,
+		acc.GetAnchorBalance(),
+		acc.GetAnchorTime())
 }

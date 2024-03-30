@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
-	"context"
+	"strconv"
+
+	// "context"
 	"errors"
 	"fmt"
 	"log"
@@ -13,18 +15,27 @@ import (
 
 	"github.com/Xuanwo/go-locale"
 	"github.com/dknelson9876/oregano/ocli"
+	"github.com/dknelson9876/oregano/omoney"
+	"github.com/google/shlex"
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
+)
+
+var (
+	workingList []interface{}
+	oview       *ocli.OViewPlain
+	model       *omoney.Model
 )
 
 func main() {
 	// disable some of the things that log prints by default
 	log.SetFlags(0)
 	// TODO: change log level based on command line flags
-	olog := ocli.NewOLogger(ocli.DebugDetail)
-	oview := ocli.NewOViewPlain(false)
+	olog := ocli.NewOLogger(ocli.Debug)
+	oview = ocli.NewOViewPlain(false)
 
 	// Wait for new line to take real action
 	reader := bufio.NewReader(os.Stdin)
@@ -36,17 +47,18 @@ func main() {
 	viper.SetDefault("oregano.data_dir", filepath.Join(dirname, ".config", "oregano"))
 
 	// Load stored tokens and aliases
+	var err error
 	dataDir := viper.GetString("oregano.data_dir")
-	data, err := ocli.LoadData(dataDir)
+	model, err = ocli.LoadModel(dataDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {
 		olog.Println(ocli.Debug, "Found links to institutions: ")
-		for itemID := range data.Tokens {
-			if alias, ok := data.BackAliases[itemID]; ok {
-				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", itemID, alias)
+		for id, acc := range model.Accounts {
+			if acc.Alias != "" {
+				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", id, acc.Alias)
 			} else {
-				olog.Printf(ocli.Debug, "-- %s\n", itemID)
+				olog.Printf(ocli.Debug, "-- %s\n", id)
 			}
 		}
 	}
@@ -71,41 +83,49 @@ func main() {
 	viper.AutomaticEnv()
 
 	// Use helper to detect country and lang from env/config
-	countries, lang := DetectRegion()
+	// countries, lang := DetectRegion()
 
 	// Load the plaid environment from the config
 	viper.SetDefault("plaid.environment", "sandbox")
-	plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
+	// plaidEnvStr := strings.ToLower(viper.GetString("plaid.environment"))
 
-	var plaidEnv plaid.Environment
-	switch plaidEnvStr {
-	case "sandbox":
-		plaidEnv = plaid.Sandbox
-	case "development":
-		plaidEnv = plaid.Development
-	default:
-		log.Fatalln("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
-	}
+	// NOTE: Plaid is manually disabled here until I can get back to integrating it
+	plaidDisabled := true
+	// var plaidEnv plaid.Environment
+	// switch plaidEnvStr {
+	// case "sandbox":
+	// 	plaidEnv = plaid.Sandbox
+	// case "development":
+	// 	plaidEnv = plaid.Development
+	// default:
+	// 	log.Println("Invalid plaid environment. Supported environments are 'sandbox' or 'development'")
+	// 	plaidDisabled = true
+	// }
 
 	// check that the required plaid api keys are present
 	if !viper.IsSet("plaid.client_id") {
-		log.Println("⚠️  PLAID_CLIENT_ID not set. Please set in as an envvar or in config.json.")
-		os.Exit(1)
+		log.Println("⚠️  PLAID_CLIENT_ID not set. Plaid connected features will not work until PLAID_CLIENT_ID is set in as an envvar or in config.json.")
+		plaidDisabled = true
 	}
 	if !viper.IsSet("plaid.secret") {
-		log.Println("⚠️ PLAID_SECRET not set. Please set in as an envvar or in config.json.")
-		os.Exit(1)
+		log.Println("⚠️ PLAID_SECRET not set. Plaid connected features will not work until PLAID_SECRET is set in as an envvar or in config.json.")
+		plaidDisabled = true
 	}
 
 	// Build the plaid client using their library
-	opts := plaid.NewConfiguration()
-	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
-	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
-	opts.UseEnvironment(plaidEnv)
-	client := plaid.NewAPIClient(opts)
-	ctx := context.Background()
+	// var client *plaid.APIClient
+	// if !plaidDisabled {
+	// 	opts := plaid.NewConfiguration()
+	// 	opts.AddDefaultHeader("PLAID-CLIENT-ID", viper.GetString("plaid.client_id"))
+	// 	opts.AddDefaultHeader("PLAID-SECRET", viper.GetString("plaid.secret"))
+	// 	opts.UseEnvironment(plaidEnv)
+	// 	client = plaid.NewAPIClient(opts)
+	// }
+	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
+	workingList = make([]interface{}, 0)
+
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
 	for {
@@ -113,83 +133,517 @@ func main() {
 		var line string
 		// fmt.Scanln(&line)
 		line, err = reader.ReadString('\n')
-		// tokens, err := shlex.Split(line)
-		tokens := strings.Fields(line)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		tokens, err := shlex.Split(line)
+		// tokens := strings.Fields(line)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
 		olog.Print(ocli.DebugDetail, tokens)
+		if len(tokens) == 0 {
+			continue
+		}
 		switch tokens[0] {
 		case "h", "help":
+			if len(tokens) == 2 {
+				switch tokens[1] {
+				case "link":
+					log.Println("link - link a new institution (Opens in a new browser tab)")
+					log.Println("\tOpens a new browser tab to go through the")
+					log.Println("\tPlaid account linking process")
+					log.Println("usage: link")
+				case "ls", "list":
+					log.Println("list - list accounts or transactions")
+					log.Println("\tProvide an alias to list transactions under that account,")
+					log.Println("\tor don't provide an alias to list all accounts")
+					log.Println("usage: ls (alias) (options)")
+					log.Println("\t-l\t(long) Show more details")
+				case "alias":
+					log.Println("alias - Assign a new alias to an account")
+					log.Println("\tAssigns the alias [alias] as the alias of ")
+					log.Println("\tthe account with id [id]")
+					log.Println("\tFind an account's id using `ls -l` or `acc`")
+					log.Println("usage: alias [id] [alias]")
+				case "rm", "remove":
+					log.Println("remove - Remove an account or transaction")
+					log.Println("\tSpecify the working id (wid) or actual id")
+					log.Println("\tof a transaction or account. If no flag")
+					log.Println("\tis provided, the provided id is assumed to")
+					log.Println("\tbe a wid")
+					log.Println("usage: rm (options) [id]")
+					log.Println("\t-w\t(working) Provided id is a working id")
+					log.Println("\t-t\t(transaction) Provided id is a transaction id")
+					log.Println("\t\t\t TODO not implemented")
+					log.Println("\t-c\t(account) Provided id is an account id")
+				case "acc", "account":
+					log.Println("account - print or edit information about an account")
+					log.Println("Usage: account [alias/id] (options)")
+					log.Println("\t-a <amount> <date>\t(anchor) set a known amount at a time to base balance off of")
+				case "trs", "transactions":
+					log.Println("transactions - list transactions from a specific account")
+					log.Println("usage: trs [id/alias]")
+				case "import":
+					log.Println("import - interactively import transactions from a CSV file")
+					log.Println("usage: import [filepath]")
+				case "p", "print":
+					log.Println("print - print more information about a transaction from the working list")
+					log.Println("usage: p [wid] (options)")
+					log.Println("\t-l\t(long) Show even more details about the transaction")
+				case "new":
+					log.Println("new - manually create account or transaction")
+					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
+					log.Println("* new transaction []...\t\t TODO")
+				}
+				continue
+			}
 			log.Println("oregano-cli - Terminal budgeting app" +
 				"Commands:\n" +
 				"* help (h)\t\tPrint this menu\n" +
 				"* quit (q)\t\tQuit oregano\n" +
 				"* link\t\t\tLink a new institution (Opens in a new browser tab)\n" +
-				"* list (ls)\t\tList linked institutions\n" +
-				"* remove (rm) [alias/id...]\tRemove a linked institution\n" + 
-				"* alias [token] [alias]\tAssign [alias] as the new alias for [token]")
+				"* list (ls)\t\tList accounts or transactions\n" +
+				"* alias [id] [alias]\tAssign [alias] as the new alias for [id]\n" +
+				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
+				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
+				"* transactions (trs) [alias/id]\t TODO description\n" +
+				"* import [filename]\t TODO description\n" +
+				"* print (p) [argument index]\tPrint more details about something that was output\n" +
+				"* repair\t\tUsing higher level data as authoritative, correct inconsistencies\n" +
+				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
 		case "link":
-			linkNewInstitution(data, client, countries, lang)
-		case "list", "ls":
-			log.Println("Institutions:")
-			for itemID := range data.Tokens {
-				if alias, ok := data.BackAliases[itemID]; ok {
-					log.Printf("-- %s\t(%s)\n", itemID, alias)
-				} else {
-					log.Printf("-- %s\n", itemID)
-				}
-			}
-		case "alias":
-			if len(tokens) != 3 {
-				log.Println("Error: alias requires exactly 2 arguments")
-				log.Println("Usage: alias [token] [alias]")
+			if plaidDisabled {
+				log.Println("Link has been manually disabled")
+				// linkNewInstitution(model, client, countries, lang)
 			} else {
-				err = data.SetAlias(tokens[1], tokens[2])
-				if err != nil {
-					log.Printf("Error: %s\n", err)
-				}
+				log.Println("link is unavailable while Plaid integration is disabled")
 			}
+		case "list", "ls":
+			listCmd(tokens)
+		case "alias":
+			aliasCmd(tokens)
 		case "remove", "rm":
-			for _, input := range tokens[1:] {
-				log.Printf("Removing institution %s\n", input)
-				err = data.RemoveToken(input)
-				if err != nil {
-					log.Println(err)
-				}
-			}
-		case "accounts", "acc":
-			for _, input := range tokens[1:] {
-				token, err := data.GetAccessToken(input)
-				if err != nil {
-					log.Printf("Error: %s\n", err)
-					continue
-				}
-				resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
-					*plaid.NewAccountsGetRequest(token),
-				).Execute()
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				oview.ShowAccounts(resp.GetAccounts())
-			}
+			removeCmd(tokens)
+		case "account", "acc":
+			accountCmd(tokens)
+		case "transactions", "trs":
+			transactionsCmd(tokens)
+		case "import":
+			importCmd(tokens)
+		case "print", "p":
+			printCmd(tokens)
+		case "repair":
+			model.RepairAccounts()
+			ocli.Save(model)
+		case "new":
+			newCmd(tokens)
 		default:
 			log.Println("Unrecognized command. Type 'help' for valid commands")
 		}
 
 	}
 
-	//-------
 }
 
-func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []string, lang string) {
+//   - if no id is provided, accounts will be listed
+//   - if a string id is provided, it will be assumed to be an account alias
+//     and transactions in that account will be printed
+func listCmd(tokens []string) {
+	long := false
+	id := ""
+	if len(tokens) == 1 {
+		oview.ShowAccounts(maps.Values(model.Accounts), ocli.ShowAccountOptions{ShowType: true})
+		return
+	} else if len(tokens) > 1 {
+		i := 1
+		for i < len(tokens) {
+			token := tokens[i]
+			//TODO do I prevent account aliases from starting with '-'?
+
+			if strings.HasPrefix(token, "-") {
+				if token == "-l" || token == "--long" {
+					long = true
+					i++
+
+				} else {
+					log.Println("Error: unknown flag")
+					return
+				}
+
+			} else {
+				id = token
+				i++
+			}
+		}
+
+		if id != "" {
+			// ls BOA (-l)
+			acc, err := model.GetAccount(id)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			// CONTINUE HERE: a lot of todos here
+			// TODO implement -l for listing transactions
+			// TODO implement -n for listing transactions
+			// TODO this has a lot of code in common with transactionsCmd
+
+			var showList []*omoney.Transaction
+			if len(acc.Transactions) > 10 {
+				showList = acc.Transactions[:10]
+			} else {
+				showList = acc.Transactions
+			}
+
+			invert := acc.Type != omoney.CreditCard
+			oview.ShowTransactions(showList, invert, len(workingList))
+
+			for i := range showList {
+				workingList = append(workingList, showList[i])
+			}
+		} else {
+			// `ls (-l)`
+			ops := ocli.ShowAccountOptions{ShowType: true}
+			if long {
+				ops.ShowId = true
+				ops.ShowAnchor = true
+			}
+			oview.ShowAccounts(maps.Values(model.Accounts), ops)
+		}
+
+	}
+}
+
+func aliasCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 2,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'alias' command")
+		log.Println("Usage: alias [id] [alias]")
+		log.Println("Use 'help alias' for details")
+		return
+	}
+
+	err = model.SetAlias(flags["<>"][0], flags["<>"][1])
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+	} else {
+		ocli.Save(model)
+	}
+
+}
+
+func removeCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+		"-t": 0,
+		"-w": 0,
+		"-c": 0,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'rm' command")
+		log.Println("Usage: rm [alias/id]")
+		log.Println("Use 'help remove' for details")
+		return
+	}
+
+	flag := "working"
+	var tr *omoney.Transaction
+	var acc *omoney.Account
+
+	if _, ok := flags["-c"]; ok {
+		flag = "account"
+	} else if _, ok := flags["-t"]; ok {
+		flag = "transaction"
+		log.Println("ERROR: Removing by transaction id not yet implemented")
+		return
+	}
+
+	input := flags["<>"][0]
+	if flag == "working" {
+		item, err := fromWorkingList(input, workingList)
+		if err != nil {
+			log.Printf("Could not find item in working list.\nError: %s\n", err)
+			return
+		}
+
+		if transaction, ok := item.(*omoney.Transaction); ok {
+			log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
+			tr = transaction
+		} else if account, ok := item.(*omoney.Account); ok {
+			log.Printf("Pulled account %s from working list\n", account.Alias)
+			acc = account
+		}
+	}
+
+	if flag == "working" && tr != nil {
+		log.Printf("Removing transaction %s\n", input)
+		err = model.RemoveTransaction(tr)
+
+	} else if flag == "account" || (flag == "working" && acc != nil) {
+		log.Printf("Removing account %s\n", input)
+		if acc != nil {
+			input = acc.Id
+		}
+		err = model.RemoveAccount(input)
+	}
+
+	if err != nil {
+		log.Println(err)
+	} else {
+		ocli.Save(model)
+	}
+
+}
+
+func accountCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+		"-a": 2,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'acc' command")
+		log.Println("Usage: acc [alias/id]")
+		log.Println("Use 'help account' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	if anchor, ok := flags["-a"]; ok {
+		err = model.SetAnchor(input, anchor)
+		if err != nil {
+			log.Printf("Error: %s\n", err)
+		} else {
+			ocli.Save(model)
+			acc, _ := model.GetAccount(input)
+			log.Printf("Updated anchor to $%.2f on %s", acc.AnchorBalance, acc.AnchorTime.Format("2006/01/02"))
+		}
+		return
+	}
+
+	acc, err := model.GetAccount(input)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return
+	}
+	if acc.PlaidToken == "" {
+		// account was manually created
+		oview.ShowAccount(acc)
+	} else {
+		log.Println("Details about Plaid accounts has been manually disabled")
+		// Not sure where to move this code for now
+		// I guess I might end up making some kind of
+		// Plaid-compatibility layer for snippets like this
+		// resp, _, err := client.PlaidApi.AccountsGet(ctx).AccountsGetRequest(
+		// 	*plaid.NewAccountsGetRequest(token),
+		// ).Execute()
+		// if err != nil {
+		// 	log.Println(err)
+		// 	return
+		// }
+		// oview.ShowPlaidAccounts(resp.GetAccounts())
+	}
+
+}
+
+func transactionsCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'trs' command")
+		log.Println("Usage: trs [alias/id]")
+		log.Println("Use 'help transactions' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	acc, err := model.GetAccount(input)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// TODO add flag for date range of transactions
+
+	// Limit printed transactions to 10
+	// TODO add flag to print specific number of transactions
+	var showList []*omoney.Transaction
+	if len(acc.Transactions) > 10 {
+		showList = acc.Transactions[:10]
+	} else {
+		showList = acc.Transactions
+	}
+
+	invert := acc.Type != omoney.CreditCard
+	oview.ShowTransactions(showList, invert, len(workingList))
+
+	for i := range showList {
+		workingList = append(workingList, showList[i])
+	}
+
+}
+
+func importCmd(tokens []string) {
+	validFlags := map[string]int{
+		"<>": 1,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'import' command")
+		log.Println("Usage: import [filename]")
+		log.Println("Use 'help import' for details")
+		return
+	}
+
+	input := flags["<>"][0]
+	newTrans := ocli.ReadCsv(input, model.Aliases)
+	for _, tr := range newTrans {
+		model.AddTransaction(tr)
+	}
+	err = ocli.Save(model)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+}
+
+func printCmd(tokens []string) {
+	// -l	long (detailed)
+	validFlags := map[string]int{
+		"<>": 1,
+		"-l": 0,
+	}
+
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'import' command")
+		log.Println("Usage: import [filename]")
+		log.Println("Use 'help import' for details")
+		return
+	}
+
+	_, long := flags["-l"]
+	arg := flags["<>"][0]
+
+	v, err := fromWorkingList(arg, workingList)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return
+	}
+
+	switch t := v.(type) {
+	default:
+		fmt.Printf("%v\n", v)
+	case *omoney.Transaction:
+		ops := ocli.ShowTransactionOptions{}
+		if long {
+			ops.ShowId = true
+			ops.ShowCategory = true
+			ops.ShowInstDesc = true
+			ops.ShowDesc = true
+		}
+		oview.ShowTransaction(*t, ops)
+	}
+
+}
+
+func newCmd(tokens []string) {
+	if len(tokens) < 2 {
+		log.Printf("Error: command 'new' requires more arguments\n")
+		return
+	}
+
+	// trim 'new' off front of cmd
+	tokens = tokens[1:]
+
+	switch tokens[0] {
+	case "account", "acc":
+		// new acc [alias] [type]
+		validFlags := map[string]int{
+			"<>": 2,
+		}
+
+		flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+		if err != nil {
+			log.Println("Fail to parse 'new acc' command")
+			log.Println("Usage: new acc [alias] [type]")
+			log.Println("Use 'help new' for details")
+			return
+		}
+
+		acc := ocli.CreateManualAccount(flags["<>"])
+		if acc == nil {
+			log.Println("Error making new manual account")
+			return
+		}
+		model.AddAccount(*acc)
+		err = ocli.Save(model)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	case "transaction", "tr":
+		// new tr [acc] [payee] [amount] (date) (cat)
+		//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
+		if len(tokens) < 3 {
+			log.Printf("Error: command 'new transaction' requires more arguments\n")
+			log.Printf("Usage: new tr [account] [payee] [amount] (date) (category) (desc)")
+			return
+		}
+
+		// if account is valid alias, replace with ID
+		// else if account is not valid id, error
+		if model.IsValidAccountAlias(tokens[1]) {
+			tokens[1] = model.GetAccountId(tokens[1])
+		} else if !model.IsValidAccountId(tokens[1]) {
+			log.Printf("Error: %s is not a valid account alias or id\n", tokens[1])
+			return
+		}
+
+		// trim 'tr' off front of cmd
+		tokens = tokens[1:]
+
+		tr := ocli.CreateManualTransaction(tokens)
+		if tr == nil {
+			log.Println("Error making new manual transaction")
+			return
+		}
+
+		// transaction is purposely handled by model and not
+		// account because I intend to later add an always
+		// up to date budget model
+		model.AddTransaction(tr)
+		log.Printf("Saving new transaction %+v\n", tr)
+		err := ocli.Save(model)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	default:
+		log.Printf("Error: unknown subcommand %s\n", tokens[1])
+		log.Println("Valid subcommands are: account, transaction")
+	}
+}
+
+func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries []string, lang string) {
 	// Build a linker struct to run Plaid Link
-	linker := ocli.NewLinker(data, client, countries, lang)
+	linker := ocli.NewLinker(client, countries, lang)
 	port := viper.GetString("link.port")
 
 	// Attempt to run link in a browser window
@@ -201,18 +655,12 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 	log.Println("Institution linked!")
 	log.Printf("Item ID: %s\n", tokenPair.ItemID)
 
-	// Store the long term access token from plaid
-	data.Tokens[tokenPair.ItemID] = tokenPair.AccessToken
-	err = data.Save()
-	if err != nil {
-		log.Fatalln(err)
-	}
+	acc := omoney.NewAccount(
+		omoney.WithPlaidIds(tokenPair.ItemID, tokenPair.AccessToken),
+	)
+	//TODO: Pull AccountType from Plaid
 
-	// If an alias already exists, print it
-	if alias, ok := data.BackAliases[tokenPair.ItemID]; ok {
-		log.Printf("Existing Alias: %s\n", alias)
-		return
-	}
+	log.Printf("Default alias in struct: %s\n", acc.Alias)
 
 	prompt := promptui.Prompt{
 		Label: "Provide an alias to use for this institution: (default: none)",
@@ -226,6 +674,9 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 				return errors.New("alias must contain only letters, numbers, or underscore")
 			}
 
+			if _, ok := model.Aliases[input]; ok {
+				return errors.New("that alias is already in use")
+			}
 			return nil
 		},
 	}
@@ -235,11 +686,25 @@ func linkNewInstitution(data *ocli.Data, client *plaid.APIClient, countries []st
 		log.Fatalln(err)
 	}
 	if input != "" {
-		err = data.SetAlias(tokenPair.ItemID, input)
-		if err != nil {
-			log.Fatalln(err)
-		}
+		acc.Alias = input
 	}
+
+	// Store the long term access token from plaid
+	model.AddAccount(*acc)
+	err = ocli.Save(model)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+}
+
+func fromWorkingList(input string, workingList []interface{}) (interface{}, error) {
+	i, err := strconv.Atoi(input)
+	if err != nil || i >= len(workingList) {
+		return nil, fmt.Errorf("%s is not a valid wid", input)
+	}
+
+	return workingList[i], nil
 }
 
 func DetectRegion() ([]string, string) {
@@ -308,4 +773,3 @@ func sliceToMap(slice []string) map[string]bool {
 	}
 	return set
 }
-

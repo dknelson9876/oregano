@@ -1,166 +1,156 @@
 package ocli
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"log"
-	"os"
-	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/araddon/dateparse"
+	"github.com/dknelson9876/oregano/omoney"
 )
 
-type Data struct {
-	DataDir     string
-	Tokens      map[string]string // item id -> access token
-	Aliases     map[string]string // alias -> item id
-	BackAliases map[string]string // item id -> alias
-}
-
-func LoadData(dataDir string) (*Data, error) {
-	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
-
-	data := &Data{
-		DataDir:     dataDir,
-		BackAliases: make(map[string]string),
+func CreateManualAccount(input []string) *omoney.Account {
+	if len(input) < 2 {
+		fmt.Println("Error: new account requires exactly 2 arguments")
+		fmt.Println("Usage: new account [alias] [type]")
+		return nil
 	}
-
-	data.loadTokens()
-	data.loadAliases()
-
-	return data, nil
-}
-
-func (d *Data) loadTokens() {
-	var tokens map[string]string = make(map[string]string)
-	filePath := d.tokensPath()
-	err := load(filePath, &tokens)
+	alias := input[0]
+	accType, err := omoney.ParseAccountType(input[1])
 	if err != nil {
-		log.Printf("Error loading tokens from %s. Assuming empty tokens. Error: %s", d.tokensPath(), err)
+		fmt.Printf("Error: %s\n", err)
+		return nil
 	}
 
-	d.Tokens = tokens
+	return omoney.NewAccount(
+		omoney.WithAlias(alias),
+		omoney.WithAccountType(accType),
+	)
 }
 
-func (d *Data) tokensPath() string {
-	return filepath.Join(d.DataDir, "data", "tokens.json")
-}
+func CreateManualTransaction(input []string) *omoney.Transaction {
+	// new tr [acc] [payee] [amount] (date) (cat)
+	//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
 
-func (d *Data) loadAliases() {
-	var aliases map[string]string = make(map[string]string)
-	filePath := d.aliasesPath()
-	err := load(filePath, &aliases)
+	acc := input[0]
+
+	payee := input[1]
+
+	amount, err := strconv.ParseFloat(input[2], 64)
 	if err != nil {
-		log.Printf("Error loading aliases from %s. Assuming empty tokens. Error: %s", d.aliasesPath(), err)
+		fmt.Printf("Error: Unable to parse amount %s\n", input[1])
+		return nil
 	}
 
-	d.Aliases = aliases
-
-	for alias, itemID := range aliases {
-		d.BackAliases[itemID] = alias
-	}
-}
-
-func (d *Data) aliasesPath() string {
-	return filepath.Join(d.DataDir, "data", "aliases.json")
-}
-
-func load(filePath string, v interface{}) error {
-	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
-
-	if err != nil {
-		return err
-	} else {
-		defer f.Close()
-		b, err := io.ReadAll(f)
-		if err != nil {
-			return err
+	var date time.Time
+	dateFound := false
+	cat := ""
+	desc := ""
+	endPositional := false
+	i := 3
+	for i < len(input) {
+		if strings.HasPrefix(input[i], "-") {
+			endPositional = true
+			if i+1 == len(input) {
+				fmt.Println("Error: Found flag with no value at end of command")
+				return nil
+			}
+			switch input[i] {
+			case "-t", "--time":
+				date, err = dateparse.ParseLocal(input[i+1])
+				if err != nil {
+					fmt.Printf("Error: Unable to parse datetime %s\n", input[i+1])
+					return nil
+				}
+				dateFound = true
+			case "-c", "--category":
+				cat = input[i+1]
+			case "-d", "--description":
+				desc = input[i+1]
+			default:
+				fmt.Printf("Error: Unrecognized flag %s\n", input[i])
+				return nil
+			}
+			i += 2
+		} else {
+			if endPositional {
+				// found positional arg, after using flag. Ambiguous, so fail
+				fmt.Printf("Error: Positional argument after using flag. Cannot parse new transaction\n")
+				return nil
+			} else {
+				// still on positional args
+				switch i {
+				case 3:
+					date, err = dateparse.ParseLocal(input[3])
+					if err != nil {
+						fmt.Printf("Error: Unable to parse datetime %s\n", input[3])
+						return nil
+					}
+					dateFound = true
+				case 4:
+					cat = input[4]
+				case 5:
+					desc = input[5]
+				default:
+					fmt.Println("ERROR: this should be unreachable, unless a missed an earlier check")
+					return nil
+				}
+				i++
+			}
 		}
-
-		return json.Unmarshal(b, v)
 	}
+
+	if !dateFound {
+		date = time.Now()
+	}
+
+	return omoney.NewTransaction(acc, payee, amount,
+		omoney.WithDate(date),
+		omoney.WithCategory(cat),
+		omoney.WithDescription(desc))
 }
 
-func (d *Data) Save() error {
-	err := d.SaveTokens()
-	if err != nil {
-		return err
+// format of flagMap is {<flag>: <number of arguments for flag>}
+func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]string, error) {
+	toreturn := make(map[string][]string, len(flagMap))
+
+	tokens = tokens[1:] // trim off command name every time
+	i := 0
+	for i < len(tokens) {
+		if argCount, ok := flagMap[tokens[i]]; ok {
+			if i+argCount > len(tokens) {
+				return nil, fmt.Errorf("missing arguments for flag %s", tokens[i])
+			} else {
+				//TODO: check that tokens captured as args here are not
+				// other flags
+				toreturn[tokens[i]] = tokens[i+1 : i+1+argCount]
+				i += argCount + 1
+			}
+
+		} else if argCount, ok := flagMap["<>"]; ok {
+			// use "<>" as special flag for plain arguments
+			if i+argCount > len(tokens) {
+				return nil, fmt.Errorf("missing arguments for flag %s", tokens[i])
+			} else {
+				//TODO: check that tokens captured as args here are not
+				// other flags
+				toreturn["<>"] = tokens[i : i+argCount]
+				i += argCount
+			}
+
+		} else {
+			return nil, fmt.Errorf("invalid flag %s", tokens[i])
+		}
 	}
 
-	err = d.SaveAliases()
-	if err != nil {
-		return err
+	if _, ok := flagMap["<>"]; ok {
+		if _, ok := toreturn["<>"]; !ok {
+			// if we found no plain arguments, but they are needed
+			return nil, errors.New("missing required positional arguments")
+		}
 	}
 
-	return nil
-}
-
-func (d *Data) SaveTokens() error {
-	return save(d.Tokens, d.tokensPath())
-}
-
-func (d *Data) SaveAliases() error {
-	return save(d.Aliases, d.aliasesPath())
-}
-
-func save(v interface{}, filePath string) error {
-	// O_TRUNC to truncate to 0 bytes on open, in other words deleting
-	// the old file contents
-	f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	_, err = f.Write(b)
-	return err
-}
-
-func (d *Data) GetAccessToken(input string) (string, error) {
-	if id, ok := d.Aliases[input]; ok {
-		return d.Tokens[id], nil
-	} else if token, ok := d.Tokens[input]; ok {
-		return token, nil
-	} else {
-		return "", fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
-	}
-}
-
-func (d *Data) RemoveToken(input string) error {
-	// Check if input was an alias
-	if id, ok := d.Aliases[input]; ok {
-		delete(d.Aliases, input)
-		delete(d.BackAliases, id)
-		delete(d.Tokens, id)
-		d.Save()
-		return nil
-	} else if alias, ok := d.BackAliases[input]; ok {
-		delete(d.Aliases, alias)
-		delete(d.BackAliases, input)
-		delete(d.Tokens, input)
-		d.Save()
-		return nil
-	}
-	return fmt.Errorf("input not recognized as valid item ID or alias: %s", input)
-}
-
-func (d *Data) SetAlias(itemID string, alias string) error {
-	if _, ok := d.Tokens[itemID]; !ok {
-		return fmt.Errorf("item ID `%s` not recognized", itemID)
-	}
-
-	d.Aliases[alias] = itemID
-	d.BackAliases[itemID] = alias
-	err := d.Save()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Aliased %s to %s\n", itemID, alias)
-
-	return nil
+	return toreturn, nil
 }
