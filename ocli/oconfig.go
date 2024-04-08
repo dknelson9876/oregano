@@ -2,11 +2,12 @@ package ocli
 
 import (
 	"encoding/json"
-	"github.com/dknelson9876/oregano/omoney"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/dknelson9876/oregano/omoney"
 )
 
 // type Data struct {
@@ -16,7 +17,7 @@ import (
 // 	BackAliases map[string]string // item id -> alias
 // }
 
-func LoadModel(dataDir string) (*omoney.Model, error) {
+func LoadModelFromJson(dataDir string) (*omoney.Model, error) {
 	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
 
 	model := &omoney.Model{
@@ -35,6 +36,12 @@ func LoadModel(dataDir string) (*omoney.Model, error) {
 	}
 
 	return model, nil
+}
+
+func LoadModelFromDB(dataDir string) (*omoney.Model, error) {
+	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
+
+	return omoney.NewModelFromDB(filepath.Join(dataDir, omoney.DbFilename))
 }
 
 func load(filePath string, v interface{}) error {

@@ -49,7 +49,7 @@ func main() {
 	// Load stored tokens and aliases
 	var err error
 	dataDir := viper.GetString("oregano.data_dir")
-	model, err = ocli.LoadModel(dataDir)
+	model, err = ocli.LoadModelFromJson(dataDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {

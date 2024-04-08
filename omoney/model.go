@@ -1,26 +1,95 @@
 package omoney
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
 
 	"github.com/araddon/dateparse"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
+	"github.com/uptrace/bun/driver/sqliteshim"
+)
+
+const (
+	DbFilename = "oregano_data.db"
 )
 
 type Model struct {
-	FilePath string
-	Accounts map[string]Account
-	Aliases  map[string]string // alias -> uuid
+	// FilePath string
+	// Accounts map[string]Account
+	// Aliases  map[string]string // alias -> uuid
+
+	db *bun.DB
+}
+
+func NewModelFromDB(filepath string) (*Model, error) {
+	sqldb, err := sql.Open(sqliteshim.ShimName, filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	_, err = db.NewCreateTable().
+		Model((*Account)(nil)).
+		IfNotExists().
+		Exec(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.NewCreateTable().
+		Model((*Transaction)(nil)).
+		IfNotExists().
+		Exec(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	return &Model{db: db}, nil
 }
 
 func (m *Model) GetAccount(input string) (Account, error) {
-	if acc, ok := m.Accounts[input]; ok {
-		return acc, nil
-	} else if id, ok := m.Aliases[input]; ok {
-		return m.Accounts[id], nil
-	} else {
-		return Account{}, fmt.Errorf("input not recognized as valid account ID or alias: %s", input)
+	// if acc, ok := m.Accounts[input]; ok {
+	// 	return acc, nil
+	// } else if id, ok := m.Aliases[input]; ok {
+	// 	return m.Accounts[id], nil
+	// } else {
+	// 	return Account{}, fmt.Errorf("input not recognized as valid account ID or alias: %s", input)
+	// }
+	var acc Account
+	err := m.db.NewSelect().
+		Model(acc).
+		Where("id = ?", input).
+		Limit(1).
+		Scan(context.TODO())
+	if err != sql.ErrNoRows {
+		if err != nil {
+			return Account{}, err
+		}
+		if acc.Id != "" {
+			return acc, nil
+		}
 	}
+
+	err = m.db.NewSelect().
+		Model(acc).
+		Where("alias = ?", input).
+		Limit(1).
+		Scan(context.TODO())
+	if err != sql.ErrNoRows {
+		if err != nil {
+			return Account{}, err
+		}
+		if acc.Id != "" {
+			return acc, nil
+		}
+	}
+
+	return Account{}, fmt.Errorf("input not recognized as valid account ID or alias: %s", input)
+
 }
 
 func (m *Model) IsValidAccountId(input string) bool {
