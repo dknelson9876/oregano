@@ -50,7 +50,6 @@ func NewAccount(options ...AccountOption) *Account {
 	acc := &Account{
 		Id:           uuid.New().String(),
 		Type:         UnknownAccount,
-		Transactions: make([]*Transaction, 0),
 		AnchorTime:   time.Now(),
 	}
 

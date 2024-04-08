@@ -20,7 +20,6 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
-	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 )
 
@@ -49,12 +48,12 @@ func main() {
 	// Load stored tokens and aliases
 	var err error
 	dataDir := viper.GetString("oregano.data_dir")
-	model, err = ocli.LoadModelFromJson(dataDir)
+	model, err = ocli.LoadModelFromDB(dataDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {
 		olog.Println(ocli.Debug, "Found links to institutions: ")
-		for id, acc := range model.Accounts {
+		for id, acc := range model.GetAccounts() {
 			if acc.Alias != "" {
 				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", id, acc.Alias)
 			} else {
@@ -240,7 +239,6 @@ func main() {
 			printCmd(tokens)
 		case "repair":
 			model.RepairAccounts()
-			ocli.Save(model)
 		case "new":
 			newCmd(tokens)
 		default:
@@ -258,7 +256,7 @@ func listCmd(tokens []string) {
 	long := false
 	id := ""
 	if len(tokens) == 1 {
-		oview.ShowAccounts(maps.Values(model.Accounts), ocli.ShowAccountOptions{ShowType: true})
+		oview.ShowAccounts(model.GetAccounts(), ocli.ShowAccountOptions{ShowType: true})
 		return
 	} else if len(tokens) > 1 {
 		i := 1
@@ -315,7 +313,7 @@ func listCmd(tokens []string) {
 				ops.ShowId = true
 				ops.ShowAnchor = true
 			}
-			oview.ShowAccounts(maps.Values(model.Accounts), ops)
+			oview.ShowAccounts((model.GetAccounts()), ops)
 		}
 
 	}
@@ -337,8 +335,6 @@ func aliasCmd(tokens []string) {
 	err = model.SetAlias(flags["<>"][0], flags["<>"][1])
 	if err != nil {
 		log.Printf("Error: %s\n", err)
-	} else {
-		ocli.Save(model)
 	}
 
 }
@@ -402,8 +398,6 @@ func removeCmd(tokens []string) {
 
 	if err != nil {
 		log.Println(err)
-	} else {
-		ocli.Save(model)
 	}
 
 }
@@ -428,7 +422,6 @@ func accountCmd(tokens []string) {
 		if err != nil {
 			log.Printf("Error: %s\n", err)
 		} else {
-			ocli.Save(model)
 			acc, _ := model.GetAccount(input)
 			log.Printf("Updated anchor to $%.2f on %s", acc.AnchorBalance, acc.AnchorTime.Format("2006/01/02"))
 		}
@@ -514,13 +507,9 @@ func importCmd(tokens []string) {
 	}
 
 	input := flags["<>"][0]
-	newTrans := ocli.ReadCsv(input, model.Aliases)
+	newTrans := ocli.ReadCsv(input, model.GetAliases())
 	for _, tr := range newTrans {
 		model.AddTransaction(tr)
-	}
-	err = ocli.Save(model)
-	if err != nil {
-		log.Fatalln(err)
 	}
 
 }
@@ -595,10 +584,6 @@ func newCmd(tokens []string) {
 			return
 		}
 		model.AddAccount(*acc)
-		err = ocli.Save(model)
-		if err != nil {
-			log.Fatalln(err)
-		}
 	case "transaction", "tr":
 		// new tr [acc] [payee] [amount] (date) (cat)
 		//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
@@ -631,10 +616,6 @@ func newCmd(tokens []string) {
 		// up to date budget model
 		model.AddTransaction(tr)
 		log.Printf("Saving new transaction %+v\n", tr)
-		err := ocli.Save(model)
-		if err != nil {
-			log.Fatalln(err)
-		}
 	default:
 		log.Printf("Error: unknown subcommand %s\n", tokens[1])
 		log.Println("Valid subcommands are: account, transaction")
@@ -674,9 +655,9 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 				return errors.New("alias must contain only letters, numbers, or underscore")
 			}
 
-			if _, ok := model.Aliases[input]; ok {
-				return errors.New("that alias is already in use")
-			}
+			// if _, ok := model.Aliases[input]; ok {
+			// 	return errors.New("that alias is already in use")
+			// }
 			return nil
 		},
 	}
@@ -691,10 +672,10 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 
 	// Store the long term access token from plaid
 	model.AddAccount(*acc)
-	err = ocli.Save(model)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	// err = ocli.Save(model)
+	// if err != nil {
+	// 	log.Fatalln(err)
+	// }
 
 }
 

@@ -10,34 +10,6 @@ import (
 	"github.com/dknelson9876/oregano/omoney"
 )
 
-// type Data struct {
-// 	DataDir     string
-// 	Tokens      map[string]string // item id -> access token
-// 	Aliases     map[string]string // alias -> item id
-// 	BackAliases map[string]string // item id -> alias
-// }
-
-func LoadModelFromJson(dataDir string) (*omoney.Model, error) {
-	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
-
-	model := &omoney.Model{
-		FilePath: filepath.Join(dataDir, "data", "accounts.json"),
-		Accounts: make(map[string]omoney.Account),
-		Aliases:  make(map[string]string),
-	}
-
-	err := load(model.FilePath, &model.Accounts)
-	if err != nil {
-		log.Printf("Error loading data from %s. Proceeding with no account data. Error: %s", model.FilePath, err)
-	} else {
-		for id, account := range model.Accounts {
-			model.Aliases[account.Alias] = id
-		}
-	}
-
-	return model, nil
-}
-
 func LoadModelFromDB(dataDir string) (*omoney.Model, error) {
 	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
 
@@ -60,9 +32,9 @@ func load(filePath string, v interface{}) error {
 	}
 }
 
-func Save(model *omoney.Model) error {
-	return save(model.Accounts, model.FilePath)
-}
+// func Save(model *omoney.Model) error {
+// 	return save(model.Accounts, model.FilePath)
+// }
 
 func save(v interface{}, filePath string) error {
 	// O_TRUNC to truncate to 0 bytes on open, in other words deleting
