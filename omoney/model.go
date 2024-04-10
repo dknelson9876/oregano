@@ -52,7 +52,7 @@ func NewModelFromDB(filepath string) (*Model, error) {
 }
 
 func (m *Model) GetAccount(input string) (Account, error) {
-	acc := Account{}
+	acc := &Account{}
 
 	// WARNING: This will likely break if an alias that looks like
 	//  an id is ever assigned. So for now, just don't
@@ -67,7 +67,7 @@ func (m *Model) GetAccount(input string) (Account, error) {
 			return Account{}, err
 		}
 		if acc.Id != "" {
-			return acc, nil
+			return *acc, nil
 		}
 	}
 
@@ -167,7 +167,7 @@ func (m *Model) GetAccessToken(input string) (string, error) {
 
 func (m *Model) AddAccount(acc Account) {
 	m.db.NewInsert().
-		Model(acc).
+		Model(&acc).
 		Exec(context.TODO())
 }
 
@@ -247,15 +247,15 @@ func (m *Model) SetAnchor(account string, anchor []string) error {
 	return err
 }
 
-func (m *Model) AddTransaction(tr *Transaction) {
-	acc := m.Accounts[tr.AccountId]
-	acc.AddTransaction(tr)
-	m.Accounts[tr.AccountId] = acc
-}
+// func (m *Model) AddTransaction(tr *Transaction) {
+// 	acc := m.Accounts[tr.AccountId]
+// 	acc.AddTransaction(tr)
+// 	m.Accounts[tr.AccountId] = acc
+// }
 
-func (m *Model) RemoveTransaction(tr *Transaction) error {
-	acc := m.Accounts[tr.AccountId]
-	err := acc.RemoveTransaction(tr)
-	m.Accounts[tr.AccountId] = acc
-	return err
-}
+// func (m *Model) RemoveTransaction(tr *Transaction) error {
+// 	acc := m.Accounts[tr.AccountId]
+// 	err := acc.RemoveTransaction(tr)
+// 	m.Accounts[tr.AccountId] = acc
+// 	return err
+// }
