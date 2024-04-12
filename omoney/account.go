@@ -1,9 +1,9 @@
 package omoney
 
 import (
-	"errors"
+	// "errors"
 	"fmt"
-	"sort"
+	// "sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,7 +50,7 @@ func NewAccount(options ...AccountOption) *Account {
 	acc := &Account{
 		Id:           uuid.New().String(),
 		Type:         UnknownAccount,
-		AnchorTime:   time.Now(),
+		AnchorTime:   time.Now().Truncate(time.Second),
 	}
 
 	for _, op := range options {
@@ -103,11 +103,11 @@ func ParseAccountType(input string) (AccountType, error) {
 	}
 }
 
-func (acc *Account) SetAnchor(balance float64, time time.Time) {
-	acc.AnchorBalance = balance
-	acc.AnchorTime = time
-	acc.UpdateCurrentBalance()
-}
+// func (acc *Account) SetAnchor(balance float64, time time.Time) {
+// 	acc.AnchorBalance = balance
+// 	acc.AnchorTime = time
+// 	acc.UpdateCurrentBalance()
+// }
 
 func (acc *Account) GetAnchor() (float64, time.Time) {
 	return acc.AnchorBalance, acc.AnchorTime
@@ -121,49 +121,58 @@ func (acc *Account) GetAnchorTime() time.Time {
 	return acc.AnchorTime
 }
 
-func (acc *Account) RepairTransactions() {
-	// Repair List:
-	// - Set Account ID within transactions to match this account
-	for _, tr := range acc.Transactions {
-		tr.AccountId = acc.Id
-	}
-}
+// func (acc *Account) RepairTransactions() {
+// 	// Repair List:
+// 	// - Set Account ID within transactions to match this account
+// 	for _, tr := range acc.Transactions {
+// 		tr.AccountId = acc.Id
+// 	}
+// }
 
-func (acc *Account) AddTransaction(tr *Transaction) {
-	acc.Transactions = append(acc.Transactions, tr)
-	sort.Slice(acc.Transactions, func(i, j int) bool {
-		return acc.Transactions[i].Date.After(acc.Transactions[j].Date)
-	})
+// func (acc *Account) AddTransaction(tr *Transaction) {
+// 	acc.Transactions = append(acc.Transactions, tr)
+// 	sort.Slice(acc.Transactions, func(i, j int) bool {
+// 		return acc.Transactions[i].Date.After(acc.Transactions[j].Date)
+// 	})
 
-	acc.UpdateCurrentBalance()
-}
+// 	acc.UpdateCurrentBalance()
+// }
 
-func (acc *Account) RemoveTransaction(tr *Transaction) error {
-	for i, t := range acc.Transactions {
-		if t == tr {
-			acc.Transactions = append(acc.Transactions[:i], acc.Transactions[i+1:]...)
-			acc.UpdateCurrentBalance()
-			return nil
-		}
-	}
+// func (acc *Account) RemoveTransaction(tr *Transaction) error {
+// 	for i, t := range acc.Transactions {
+// 		if t == tr {
+// 			acc.Transactions = append(acc.Transactions[:i], acc.Transactions[i+1:]...)
+// 			acc.UpdateCurrentBalance()
+// 			return nil
+// 		}
+// 	}
 
-	return errors.New("transaction not found")
-}
+// 	return errors.New("transaction not found")
+// }
 
-func (acc *Account) UpdateCurrentBalance() {
-	// Find the index of the first transaction that occured
-	// before the anchor time
-	i := sort.Search(len(acc.Transactions), func(i int) bool {
-		return acc.AnchorTime.After(acc.Transactions[i].Date)
-	})
+// func (acc *Account) UpdateCurrentBalance() {
+// 	// Find the index of the first transaction that occured
+// 	// before the anchor time
+// 	i := sort.Search(len(acc.Transactions), func(i int) bool {
+// 		return acc.AnchorTime.After(acc.Transactions[i].Date)
+// 	})
 
-	// tally the current balance by iterating over
-	// the transactions that occured since
-	affectingTransactions := acc.Transactions[:i]
-	bal := acc.AnchorBalance
-	for _, t := range affectingTransactions {
-		bal += t.Amount
-	}
+// 	// tally the current balance by iterating over
+// 	// the transactions that occured since
+// 	affectingTransactions := acc.Transactions[:i]
+// 	bal := acc.AnchorBalance
+// 	for _, t := range affectingTransactions {
+// 		bal += t.Amount
+// 	}
 
-	acc.CurrentBalance = bal
+// 	acc.CurrentBalance = bal
+// }
+
+func (a *Account) LooseEquals(other *Account) bool {
+	return a.AnchorTime.Equal(other.AnchorTime) &&
+		a.Alias == other.Alias &&
+		a.AnchorBalance == other.AnchorBalance &&
+		a.Id == other.Id &&
+		a.PlaidToken == other.PlaidToken &&
+		a.Type == other.Type
 }

@@ -3,7 +3,7 @@ package ocli
 import (
 	"encoding/json"
 	"io"
-	"log"
+	// "log"
 	"os"
 	"path/filepath"
 

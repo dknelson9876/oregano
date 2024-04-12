@@ -53,11 +53,11 @@ func main() {
 		log.Fatal(err)
 	} else {
 		olog.Println(ocli.Debug, "Found links to institutions: ")
-		for id, acc := range model.GetAccounts() {
+		for _, acc := range model.GetAccounts() {
 			if acc.Alias != "" {
-				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", id, acc.Alias)
+				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", acc.Id, acc.Alias)
 			} else {
-				olog.Printf(ocli.Debug, "-- %s\n", id)
+				olog.Printf(ocli.Debug, "-- %s\n", acc.Id)
 			}
 		}
 	}
@@ -294,11 +294,11 @@ func listCmd(tokens []string) {
 			// TODO this has a lot of code in common with transactionsCmd
 
 			var showList []*omoney.Transaction
-			if len(acc.Transactions) > 10 {
-				showList = acc.Transactions[:10]
-			} else {
-				showList = acc.Transactions
-			}
+			// if len(acc.Transactions) > 10 {
+			// 	showList = acc.Transactions[:10]
+			// } else {
+			// 	showList = acc.Transactions
+			// }
 
 			invert := acc.Type != omoney.CreditCard
 			oview.ShowTransactions(showList, invert, len(workingList))
@@ -386,7 +386,7 @@ func removeCmd(tokens []string) {
 
 	if flag == "working" && tr != nil {
 		log.Printf("Removing transaction %s\n", input)
-		err = model.RemoveTransaction(tr)
+		// err = model.RemoveTransaction(tr)
 
 	} else if flag == "account" || (flag == "working" && acc != nil) {
 		log.Printf("Removing account %s\n", input)
@@ -478,11 +478,11 @@ func transactionsCmd(tokens []string) {
 	// Limit printed transactions to 10
 	// TODO add flag to print specific number of transactions
 	var showList []*omoney.Transaction
-	if len(acc.Transactions) > 10 {
-		showList = acc.Transactions[:10]
-	} else {
-		showList = acc.Transactions
-	}
+	// if len(acc.Transactions) > 10 {
+	// 	showList = acc.Transactions[:10]
+	// } else {
+	// 	showList = acc.Transactions
+	// }
 
 	invert := acc.Type != omoney.CreditCard
 	oview.ShowTransactions(showList, invert, len(workingList))
@@ -494,23 +494,23 @@ func transactionsCmd(tokens []string) {
 }
 
 func importCmd(tokens []string) {
-	validFlags := map[string]int{
-		"<>": 1,
-	}
+	// validFlags := map[string]int{
+	// 	"<>": 1,
+	// }
 
-	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-	if err != nil {
-		log.Println("Fail to parse 'import' command")
-		log.Println("Usage: import [filename]")
-		log.Println("Use 'help import' for details")
-		return
-	}
+	// flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	// if err != nil {
+	// 	log.Println("Fail to parse 'import' command")
+	// 	log.Println("Usage: import [filename]")
+	// 	log.Println("Use 'help import' for details")
+	// 	return
+	// }
 
-	input := flags["<>"][0]
-	newTrans := ocli.ReadCsv(input, model.GetAliases())
-	for _, tr := range newTrans {
-		model.AddTransaction(tr)
-	}
+	// input := flags["<>"][0]
+	// newTrans := ocli.ReadCsv(input, model.GetAliases())
+	// for _, tr := range newTrans {
+	// 	// model.AddTransaction(tr)
+	// }
 
 }
 
@@ -614,7 +614,7 @@ func newCmd(tokens []string) {
 		// transaction is purposely handled by model and not
 		// account because I intend to later add an always
 		// up to date budget model
-		model.AddTransaction(tr)
+		// model.AddTransaction(tr)
 		log.Printf("Saving new transaction %+v\n", tr)
 	default:
 		log.Printf("Error: unknown subcommand %s\n", tokens[1])

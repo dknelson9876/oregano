@@ -200,9 +200,9 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 	}
 
 	headers = append(headers, "BALANCE")
-	for i, acc := range accounts {
-		rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
-	}
+	// for i, acc := range accounts {
+	// 	// rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
+	// }
 
 	if op.ShowType {
 		headers = append(headers, "TYPE")

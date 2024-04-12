@@ -78,8 +78,8 @@ func (m *Model) GetAccount(input string) (Account, error) {
 func (m *Model) GetAccounts() []Account {
 	var accs []Account
 	err := m.db.NewSelect().
-		Model((*Account)(nil)).
-		Scan(context.TODO(), accs)
+		Model(&accs).
+		Scan(context.TODO())
 	if err != nil {
 		return make([]Account, 0)
 	}
