@@ -12,7 +12,7 @@ import (
 type Transaction struct {
 	// Unique identifier for this transaction within
 	// this application. Required field.
-	UUID string
+	Id string
 	// The account belonging to the user which the money
 	// is being pulled from. Required field. Assumed to be a valid alias
 	AccountId string
@@ -49,11 +49,11 @@ type TransactionOption func(*Transaction)
 func NewTransaction(accountId string, payee string, amount float64,
 	options ...TransactionOption) *Transaction {
 	tr := &Transaction{
-		UUID:    uuid.New().String(),
+		Id:        uuid.New().String(),
 		AccountId: accountId,
-		Payee:   payee,
-		Amount:  amount,
-		Date:    time.Now(),
+		Payee:     payee,
+		Amount:    amount,
+		Date:      time.Now().Truncate(time.Second),
 	}
 
 	for _, op := range options {
@@ -97,7 +97,7 @@ func (t *Transaction) LooseEquals(other *Transaction) bool {
 
 func (t *Transaction) String() string {
 	return fmt.Sprintf("ID: %s\nAcc: %s\nPayee: %s\nAmount: %.2f\nDate: %s\nCategory: %s\nInstDescription: %s\nDescription: %s",
-		t.UUID,
+		t.Id,
 		t.AccountId,
 		t.Payee,
 		t.Amount,

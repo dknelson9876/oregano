@@ -227,6 +227,7 @@ func TestSetAlias(t *testing.T) {
 	m.AddAccount(acc)
 
 	m.SetAlias(acc.Id, "other")
+	acc.Alias = "other"
 
 	retrieved, err := m.GetAccount("other")
 	if err != nil {
@@ -234,12 +235,103 @@ func TestSetAlias(t *testing.T) {
 	}
 
 	if !acc.LooseEquals(&retrieved) {
-		t.Fatal("Change alias failed")
+		t.Fatalf("Change alias failed"+
+			"\nhave: %+v"+
+			"\nneed: %+v",
+			retrieved, acc)
 	}
 
 	retrieved, err = m.GetAccount("dummy")
 	if err == nil {
 		t.Fatal("Change alias failed")
 	}
+}
 
+func AddDummyAccounts(m *Model, count int) {
+	for i := 0; i < count; i++ {
+		acc := *NewAccount(WithAlias(fmt.Sprintf("acc%d", i)))
+		m.AddAccount(acc)
+	}
+}
+
+func TestGetTransaction(t *testing.T) {
+	m := &Model{db: CreateEmptyDB()}
+	AddDummyAccounts(m, 10)
+
+	acc, err := m.GetAccount("acc0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tr := NewTransaction(acc.Id, "Spotify", 18.25,
+		WithDate(time.Date(2001, 03, 03, 12, 0, 0, 0, time.Local)),
+		WithCategory("subscriptions"),
+		WithDescription("spotify family"),
+	)
+	m.AddTransaction(tr)
+
+	retrieved, err := m.GetTransactionById(tr.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !tr.LooseEquals(&retrieved) {
+		t.Fatalf("GetTransactionById failed"+
+			"\nhave: %+v"+
+			"\nneed: %+v",
+			retrieved, tr)
+	}
+}
+
+func TestGetTransactionsByAccount(t *testing.T) {
+	m := &Model{db: CreateEmptyDB()}
+	AddDummyAccounts(m, 10)
+
+	acc, err := m.GetAccount("acc0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 10; i++ {
+		tr := NewTransaction(acc.Id, fmt.Sprintf("bus%d", i), float64(i)*1.5)
+		err = m.AddTransaction(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	acc, err = m.GetAccount("acc1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trs := make([]Transaction, 0)
+	for i := 0; i < 10; i++ {
+		tr := NewTransaction(acc.Id, fmt.Sprintf("bus%d", i), float64(i)*1.5)
+		err = m.AddTransaction(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		trs = append(trs, *tr)
+	}
+
+	retrieved, err := m.GetTransactionsByAccount(acc.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sort.Slice(retrieved, func(i, j int) bool {
+		return retrieved[i].Payee < retrieved[j].Payee
+	})
+
+	for i, tr := range trs {
+		r := retrieved[i]
+
+		if !tr.LooseEquals(&r) {
+			t.Fatalf("GetTransactionById failed"+
+				"\nhave: %+v"+
+				"\nneed: %+v",
+				r, tr)
+		}
+	}
 }

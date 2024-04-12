@@ -136,7 +136,7 @@ func (m *Model) GetAccountId(alias string) string {
 // So that, given an alias or an id as input, reliably
 // change it to an id
 func (m *Model) resolveToId(input string) (string, error) {
-	var acc *Account
+	acc := &Account{}
 
 	err := m.db.NewSelect().
 		Model(acc).
@@ -144,14 +144,7 @@ func (m *Model) resolveToId(input string) (string, error) {
 		WhereOr("alias = ?", input).
 		Limit(1).
 		Scan(context.TODO())
-	if err != sql.ErrNoRows {
-		if err != nil {
-			return "", err
-		}
-		return acc.Id, nil
-	}
-
-	return "", fmt.Errorf("input not recognized as valid id or alias")
+	return acc.Id, err
 }
 
 // given a string that is an id or an alias, return the matching
@@ -178,6 +171,7 @@ func (m *Model) RemoveAccount(input string) error {
 	}
 
 	_, err = m.db.NewDelete().
+		Model((*Account)(nil)).
 		Where("id = ?", id).
 		Exec(context.TODO())
 
@@ -247,15 +241,41 @@ func (m *Model) SetAnchor(account string, anchor []string) error {
 	return err
 }
 
-// func (m *Model) AddTransaction(tr *Transaction) {
-// 	acc := m.Accounts[tr.AccountId]
-// 	acc.AddTransaction(tr)
-// 	m.Accounts[tr.AccountId] = acc
-// }
+func (m *Model) AddTransaction(tr *Transaction) error {
+	_, err := m.db.NewInsert().
+		Model(tr).
+		Exec(context.TODO())
+	return err
+}
 
-// func (m *Model) RemoveTransaction(tr *Transaction) error {
-// 	acc := m.Accounts[tr.AccountId]
-// 	err := acc.RemoveTransaction(tr)
-// 	m.Accounts[tr.AccountId] = acc
-// 	return err
-// }
+func (m *Model) GetTransactionById(id string) (Transaction, error) {
+	tr := &Transaction{}
+
+	err := m.db.NewSelect().
+		Model(tr).
+		Where("id = ?", id).
+		Limit(1).
+		Scan(context.TODO())
+	return *tr, err
+}
+
+func (m *Model) GetTransactionsByAccount(accId string) ([]Transaction, error) {
+	var trs []Transaction
+	err := m.db.NewSelect().
+		Model(&trs).
+		Where("account_id = ?", accId).
+		Scan(context.TODO())
+	return trs, err
+}
+
+func (m *Model) RemoveTransaction(tr *Transaction) error {
+	return m.RemoveTransactionById(tr.Id)
+}
+
+func (m *Model) RemoveTransactionById(id string) error {
+	_, err := m.db.NewDelete().
+		Model((*Transaction)(nil)).
+		Where("id = ?", id).
+		Exec(context.TODO())
+	return err
+}

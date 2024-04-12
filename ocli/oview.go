@@ -151,7 +151,7 @@ func (v *OViewPlain) ShowTransaction(tr omoney.Transaction, ops ...ShowTransacti
 	}
 
 	if op.ShowId {
-		rows = append(rows, fmt.Sprintf("Id: %s", tr.UUID))
+		rows = append(rows, fmt.Sprintf("Id: %s", tr.Id))
 	}
 
 	rows = append(rows, fmt.Sprintf("Account: %s", tr.AccountId))

@@ -103,12 +103,6 @@ func ParseAccountType(input string) (AccountType, error) {
 	}
 }
 
-// func (acc *Account) SetAnchor(balance float64, time time.Time) {
-// 	acc.AnchorBalance = balance
-// 	acc.AnchorTime = time
-// 	acc.UpdateCurrentBalance()
-// }
-
 func (acc *Account) GetAnchor() (float64, time.Time) {
 	return acc.AnchorBalance, acc.AnchorTime
 }
@@ -120,53 +114,6 @@ func (acc *Account) GetAnchorBalance() float64 {
 func (acc *Account) GetAnchorTime() time.Time {
 	return acc.AnchorTime
 }
-
-// func (acc *Account) RepairTransactions() {
-// 	// Repair List:
-// 	// - Set Account ID within transactions to match this account
-// 	for _, tr := range acc.Transactions {
-// 		tr.AccountId = acc.Id
-// 	}
-// }
-
-// func (acc *Account) AddTransaction(tr *Transaction) {
-// 	acc.Transactions = append(acc.Transactions, tr)
-// 	sort.Slice(acc.Transactions, func(i, j int) bool {
-// 		return acc.Transactions[i].Date.After(acc.Transactions[j].Date)
-// 	})
-
-// 	acc.UpdateCurrentBalance()
-// }
-
-// func (acc *Account) RemoveTransaction(tr *Transaction) error {
-// 	for i, t := range acc.Transactions {
-// 		if t == tr {
-// 			acc.Transactions = append(acc.Transactions[:i], acc.Transactions[i+1:]...)
-// 			acc.UpdateCurrentBalance()
-// 			return nil
-// 		}
-// 	}
-
-// 	return errors.New("transaction not found")
-// }
-
-// func (acc *Account) UpdateCurrentBalance() {
-// 	// Find the index of the first transaction that occured
-// 	// before the anchor time
-// 	i := sort.Search(len(acc.Transactions), func(i int) bool {
-// 		return acc.AnchorTime.After(acc.Transactions[i].Date)
-// 	})
-
-// 	// tally the current balance by iterating over
-// 	// the transactions that occured since
-// 	affectingTransactions := acc.Transactions[:i]
-// 	bal := acc.AnchorBalance
-// 	for _, t := range affectingTransactions {
-// 		bal += t.Amount
-// 	}
-
-// 	acc.CurrentBalance = bal
-// }
 
 func (a *Account) LooseEquals(other *Account) bool {
 	return a.AnchorTime.Equal(other.AnchorTime) &&
