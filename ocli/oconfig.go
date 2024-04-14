@@ -11,7 +11,7 @@ import (
 )
 
 func LoadModelFromDB(dataDir string) (*omoney.Model, error) {
-	os.MkdirAll(filepath.Join(dataDir, "data"), os.ModePerm)
+	os.MkdirAll(dataDir, os.ModePerm)
 
 	return omoney.NewModelFromDB(filepath.Join(dataDir, omoney.DbFilename))
 }

@@ -36,19 +36,35 @@ func main() {
 	olog := ocli.NewOLogger(ocli.Debug)
 	oview = ocli.NewOViewPlain(false)
 
-	// Wait for new line to take real action
-	reader := bufio.NewReader(os.Stdin)
-	// fmt.Println("Press Enter to try launching Link...")
-	// reader.ReadString('\n')
-
-	// Establish where to store data as ~/.oregano/
+	// Establish default storage folder as ~/.config/oregano/
 	dirname, _ := os.UserHomeDir()
-	viper.SetDefault("oregano.data_dir", filepath.Join(dirname, ".config", "oregano"))
+	viper.SetDefault("oregano_dir", filepath.Join(dirname, ".config", "oregano"))
+
+	// Allow environment variables to be used for config
+	viper.SetEnvPrefix("")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
+	viper.AutomaticEnv()
+
+	// load the config dir, in case it is set by env var
+	configDir := viper.GetString("oregano_dir")
+
+	// Load config.json, either from the current directory or from
+	// the directory set above
+	viper.SetConfigName("config")
+	viper.SetConfigType("json")
+	viper.AddConfigPath(configDir)
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// config file not found, not really an error
+		} else {
+			log.Fatal(err)
+		}
+	}
 
 	// Load stored tokens and aliases
-	var err error
-	dataDir := viper.GetString("oregano.data_dir")
-	model, err = ocli.LoadModelFromDB(dataDir)
+	model, err = ocli.LoadModelFromDB(configDir)
 	if err != nil {
 		log.Fatal(err)
 	} else {
@@ -61,25 +77,6 @@ func main() {
 			}
 		}
 	}
-
-	// Load config.json, preferring the current directory, but if not check ~/.oregano
-	viper.SetConfigName("config")
-	viper.SetConfigType("json")
-	viper.AddConfigPath(dataDir)
-	viper.AddConfigPath(".")
-	err = viper.ReadInConfig()
-	if err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// config file not found, not really an error
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	// Allow normal environment variables to be used in place of config.json
-	viper.SetEnvPrefix("")
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-	viper.AutomaticEnv()
 
 	// Use helper to detect country and lang from env/config
 	// countries, lang := DetectRegion()
@@ -123,6 +120,7 @@ func main() {
 	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
+	reader := bufio.NewReader(os.Stdin)
 	workingList = make([]interface{}, 0)
 
 	fmt.Println("Welcome to Oregano, the cli budget program")
@@ -137,9 +135,8 @@ func main() {
 			continue
 		}
 		tokens, err := shlex.Split(line)
-		// tokens := strings.Fields(line)
 		if err != nil {
-			log.Println(err)
+			log.Printf("Error parsing command: %s\n", err)
 			continue
 		}
 

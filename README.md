@@ -2,6 +2,8 @@
 
 > My attempt at using Plaid to build a budgeting app
 
+## Origin
+
 Since Intuit's Mint is shutting down, I haven't found a replacement that meets my requirements of:
 
 1. Free
@@ -11,5 +13,10 @@ Since Intuit's Mint is shutting down, I haven't found a replacement that meets m
 
 So this project is my "Fine, I'll do it myself" response that might die before it gets anywhere, guess we'll have to see. And because I like to torture myself with new things, I figured I'd learn how to write TUI programs and learn Go at the same time.
 
+## Usage
+
+The folder that oregano uses defaults to is `~/.config/oregano`. This can be overriden by setting the environment variable `OREGANO_DIR`. Additionally, the current folder will be checked for `config.json` before the configured directory.
+
+## Attribution
 
 Behavior for using Plaid Link borrowed from [landakram's plaid-cli](https://github.com/landakram/plaid-cli)
