@@ -121,6 +121,8 @@ func (m *Model) IsValidAccountAlias(input string) bool {
 	return exists
 }
 
+// Given the alias for an account, return the id of that account.
+// If alias does not exist, returns empty string
 func (m *Model) GetAccountId(alias string) string {
 	id := ""
 	m.db.NewSelect().

@@ -23,8 +23,13 @@ import (
 	"golang.org/x/text/language"
 )
 
+type WorkTuple struct {
+	typeName string
+	id       string
+}
+
 var (
-	workingList []interface{}
+	workingList []WorkTuple
 	oview       *ocli.OViewPlain
 	model       *omoney.Model
 )
@@ -121,7 +126,7 @@ func main() {
 
 	// ----- Begin Main Loop -----------------------------------
 	reader := bufio.NewReader(os.Stdin)
-	workingList = make([]interface{}, 0)
+	workingList = make([]WorkTuple, 0)
 
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
@@ -251,7 +256,7 @@ func main() {
 //     and transactions in that account will be printed
 func listCmd(tokens []string) {
 	long := false
-	id := ""
+	input := ""
 	if len(tokens) == 1 {
 		oview.ShowAccounts(model.GetAccounts(), ocli.ShowAccountOptions{ShowType: true})
 		return
@@ -272,16 +277,25 @@ func listCmd(tokens []string) {
 				}
 
 			} else {
-				id = token
+				input = token
 				i++
 			}
 		}
 
-		if id != "" {
+		if input != "" {
+			// string was provided, so treat as account name
+			// and attempt to list transactions from it
 			// ls BOA (-l)
-			acc, err := model.GetAccount(id)
+
+			acc, err := model.GetAccount(input)
 			if err != nil {
 				log.Println(err)
+				return
+			}
+
+			accId := model.GetAccountId(input)
+			if accId == "" {
+				log.Printf("Alias %s not recognized.\n", input)
 				return
 			}
 
@@ -290,18 +304,23 @@ func listCmd(tokens []string) {
 			// TODO implement -n for listing transactions
 			// TODO this has a lot of code in common with transactionsCmd
 
-			var showList []*omoney.Transaction
-			// if len(acc.Transactions) > 10 {
-			// 	showList = acc.Transactions[:10]
-			// } else {
-			// 	showList = acc.Transactions
-			// }
+			showList, err := model.GetTransactionsByAccount(accId)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			// Truncate list to 10 max transactions
+			// (until I write more flags)
+			if len(showList) > 10 {
+				showList = showList[:10]
+			}
 
 			invert := acc.Type != omoney.CreditCard
 			oview.ShowTransactions(showList, invert, len(workingList))
 
 			for i := range showList {
-				workingList = append(workingList, showList[i])
+				workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
 			}
 		} else {
 			// `ls (-l)`
@@ -366,7 +385,7 @@ func removeCmd(tokens []string) {
 
 	input := flags["<>"][0]
 	if flag == "working" {
-		item, err := fromWorkingList(input, workingList)
+		item, err := fromWorkingList(input)
 		if err != nil {
 			log.Printf("Could not find item in working list.\nError: %s\n", err)
 			return
@@ -383,7 +402,7 @@ func removeCmd(tokens []string) {
 
 	if flag == "working" && tr != nil {
 		log.Printf("Removing transaction %s\n", input)
-		// err = model.RemoveTransaction(tr)
+		err = model.RemoveTransaction(tr)
 
 	} else if flag == "account" || (flag == "working" && acc != nil) {
 		log.Printf("Removing account %s\n", input)
@@ -464,9 +483,9 @@ func transactionsCmd(tokens []string) {
 	}
 
 	input := flags["<>"][0]
-	acc, err := model.GetAccount(input)
-	if err != nil {
-		log.Println(err)
+	accId := model.GetAccountId(input)
+	if accId == "" {
+		log.Printf("Alias %s not recognized.\n", input)
 		return
 	}
 
@@ -474,40 +493,39 @@ func transactionsCmd(tokens []string) {
 
 	// Limit printed transactions to 10
 	// TODO add flag to print specific number of transactions
-	var showList []*omoney.Transaction
-	// if len(acc.Transactions) > 10 {
-	// 	showList = acc.Transactions[:10]
-	// } else {
-	// 	showList = acc.Transactions
-	// }
+	showList, err := model.GetTransactionsByAccount(accId)
+	if len(showList) > 10 {
+		showList = showList[:10]
+	}
 
+	acc, _ := model.GetAccount(accId)
 	invert := acc.Type != omoney.CreditCard
 	oview.ShowTransactions(showList, invert, len(workingList))
 
 	for i := range showList {
-		workingList = append(workingList, showList[i])
+		workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
 	}
 
 }
 
 func importCmd(tokens []string) {
-	// validFlags := map[string]int{
-	// 	"<>": 1,
-	// }
+	validFlags := map[string]int{
+		"<>": 1,
+	}
 
-	// flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-	// if err != nil {
-	// 	log.Println("Fail to parse 'import' command")
-	// 	log.Println("Usage: import [filename]")
-	// 	log.Println("Use 'help import' for details")
-	// 	return
-	// }
+	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
+	if err != nil {
+		log.Println("Fail to parse 'import' command")
+		log.Println("Usage: import [filename]")
+		log.Println("Use 'help import' for details")
+		return
+	}
 
-	// input := flags["<>"][0]
-	// newTrans := ocli.ReadCsv(input, model.GetAliases())
-	// for _, tr := range newTrans {
-	// 	// model.AddTransaction(tr)
-	// }
+	input := flags["<>"][0]
+	newTrans := ocli.ReadCsv(input, model.GetAliases())
+	for _, tr := range newTrans {
+		model.AddTransaction(tr)
+	}
 
 }
 
@@ -529,7 +547,7 @@ func printCmd(tokens []string) {
 	_, long := flags["-l"]
 	arg := flags["<>"][0]
 
-	v, err := fromWorkingList(arg, workingList)
+	v, err := fromWorkingList(arg)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return
@@ -611,7 +629,7 @@ func newCmd(tokens []string) {
 		// transaction is purposely handled by model and not
 		// account because I intend to later add an always
 		// up to date budget model
-		// model.AddTransaction(tr)
+		model.AddTransaction(tr)
 		log.Printf("Saving new transaction %+v\n", tr)
 	default:
 		log.Printf("Error: unknown subcommand %s\n", tokens[1])
@@ -669,20 +687,23 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 
 	// Store the long term access token from plaid
 	model.AddAccount(*acc)
-	// err = ocli.Save(model)
-	// if err != nil {
-	// 	log.Fatalln(err)
-	// }
-
 }
 
-func fromWorkingList(input string, workingList []interface{}) (interface{}, error) {
+func fromWorkingList(input string) (interface{}, error) {
 	i, err := strconv.Atoi(input)
 	if err != nil || i >= len(workingList) {
 		return nil, fmt.Errorf("%s is not a valid wid", input)
 	}
 
-	return workingList[i], nil
+	pair := workingList[i]
+	if pair.typeName == "transaction" {
+		return model.GetTransactionById(pair.id)
+	} else if pair.typeName == "account" {
+		return model.GetAccount(pair.id)
+	}
+
+	return nil, fmt.Errorf("typename from working list %s not recognized", pair.typeName)
+
 }
 
 func DetectRegion() ([]string, string) {

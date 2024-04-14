@@ -98,7 +98,7 @@ func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	fmt.Println(t)
 }
 
-func (v *OViewPlain) ShowTransactions(trs []*omoney.Transaction, invert bool, startIndex int) {
+func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, startIndex int) {
 	var negAmount int
 	if invert {
 		negAmount = -1
@@ -200,6 +200,7 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 	}
 
 	headers = append(headers, "BALANCE")
+	// TODO model.getcurrentbalance
 	// for i, acc := range accounts {
 	// 	// rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
 	// }
