@@ -258,6 +258,7 @@ func (m *Model) GetCurrentBalance(accId string) (float64, error) {
 	err = m.db.NewSelect().
 		Model((*Account)(nil)).
 		Column("anchor_balance").
+		Where("id = ?", accId).
 		Scan(context.TODO(), &anchor)
 	if err != nil {
 		return 0, err
@@ -298,6 +299,7 @@ func (m *Model) RemoveTransaction(tr *Transaction) error {
 }
 
 func (m *Model) RemoveTransactionById(id string) error {
+	fmt.Printf("Removing tr %s\n", id)
 	_, err := m.db.NewDelete().
 		Model((*Transaction)(nil)).
 		Where("id = ?", id).
