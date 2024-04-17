@@ -20,12 +20,16 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/plaid/plaid-go/plaid"
 	"github.com/spf13/viper"
-	"golang.org/x/exp/maps"
 	"golang.org/x/text/language"
 )
 
+type WorkTuple struct {
+	typeName string
+	id       string
+}
+
 var (
-	workingList []interface{}
+	workingList []WorkTuple
 	oview       *ocli.OViewPlain
 	model       *omoney.Model
 )
@@ -37,38 +41,25 @@ func main() {
 	olog := ocli.NewOLogger(ocli.Debug)
 	oview = ocli.NewOViewPlain(false)
 
-	// Wait for new line to take real action
-	reader := bufio.NewReader(os.Stdin)
-	// fmt.Println("Press Enter to try launching Link...")
-	// reader.ReadString('\n')
-
-	// Establish where to store data as ~/.oregano/
+	// Establish default storage folder as ~/.config/oregano/
 	dirname, _ := os.UserHomeDir()
-	viper.SetDefault("oregano.data_dir", filepath.Join(dirname, ".config", "oregano"))
+	viper.SetDefault("oregano_dir", filepath.Join(dirname, ".config", "oregano"))
 
-	// Load stored tokens and aliases
-	var err error
-	dataDir := viper.GetString("oregano.data_dir")
-	model, err = ocli.LoadModel(dataDir)
-	if err != nil {
-		log.Fatal(err)
-	} else {
-		olog.Println(ocli.Debug, "Found links to institutions: ")
-		for id, acc := range model.Accounts {
-			if acc.Alias != "" {
-				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", id, acc.Alias)
-			} else {
-				olog.Printf(ocli.Debug, "-- %s\n", id)
-			}
-		}
-	}
+	// Allow environment variables to be used for config
+	viper.SetEnvPrefix("")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
+	viper.AutomaticEnv()
 
-	// Load config.json, preferring the current directory, but if not check ~/.oregano
+	// load the config dir, in case it is set by env var
+	configDir := viper.GetString("oregano_dir")
+
+	// Load config.json, either from the current directory or from
+	// the directory set above
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
-	viper.AddConfigPath(dataDir)
+	viper.AddConfigPath(configDir)
 	viper.AddConfigPath(".")
-	err = viper.ReadInConfig()
+	err := viper.ReadInConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// config file not found, not really an error
@@ -77,10 +68,20 @@ func main() {
 		}
 	}
 
-	// Allow normal environment variables to be used in place of config.json
-	viper.SetEnvPrefix("")
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-	viper.AutomaticEnv()
+	// Load stored tokens and aliases
+	model, err = ocli.LoadModelFromDB(configDir)
+	if err != nil {
+		log.Fatal(err)
+	} else {
+		olog.Println(ocli.Debug, "Found links to institutions: ")
+		for _, acc := range model.GetAccounts() {
+			if acc.Alias != "" {
+				olog.Printf(ocli.Debug, "-- %s\t(%s)\n", acc.Id, acc.Alias)
+			} else {
+				olog.Printf(ocli.Debug, "-- %s\n", acc.Id)
+			}
+		}
+	}
 
 	// Use helper to detect country and lang from env/config
 	// countries, lang := DetectRegion()
@@ -124,7 +125,8 @@ func main() {
 	// ctx := context.Background()
 
 	// ----- Begin Main Loop -----------------------------------
-	workingList = make([]interface{}, 0)
+	reader := bufio.NewReader(os.Stdin)
+	workingList = make([]WorkTuple, 0)
 
 	fmt.Println("Welcome to Oregano, the cli budget program")
 	fmt.Println("For help, use 'help' (h). To quit, use 'quit' (q)")
@@ -138,9 +140,8 @@ func main() {
 			continue
 		}
 		tokens, err := shlex.Split(line)
-		// tokens := strings.Fields(line)
 		if err != nil {
-			log.Println(err)
+			log.Printf("Error parsing command: %s\n", err)
 			continue
 		}
 
@@ -240,7 +241,6 @@ func main() {
 			printCmd(tokens)
 		case "repair":
 			model.RepairAccounts()
-			ocli.Save(model)
 		case "new":
 			newCmd(tokens)
 		default:
@@ -256,9 +256,9 @@ func main() {
 //     and transactions in that account will be printed
 func listCmd(tokens []string) {
 	long := false
-	id := ""
+	input := ""
 	if len(tokens) == 1 {
-		oview.ShowAccounts(maps.Values(model.Accounts), ocli.ShowAccountOptions{ShowType: true})
+		oview.ShowAccounts(model, ocli.ShowAccountOptions{ShowType: true})
 		return
 	} else if len(tokens) > 1 {
 		i := 1
@@ -277,16 +277,25 @@ func listCmd(tokens []string) {
 				}
 
 			} else {
-				id = token
+				input = token
 				i++
 			}
 		}
 
-		if id != "" {
+		if input != "" {
+			// string was provided, so treat as account name
+			// and attempt to list transactions from it
 			// ls BOA (-l)
-			acc, err := model.GetAccount(id)
+
+			acc, err := model.GetAccount(input)
 			if err != nil {
 				log.Println(err)
+				return
+			}
+
+			accId := model.GetAccountId(input)
+			if accId == "" {
+				log.Printf("Alias %s not recognized.\n", input)
 				return
 			}
 
@@ -295,18 +304,23 @@ func listCmd(tokens []string) {
 			// TODO implement -n for listing transactions
 			// TODO this has a lot of code in common with transactionsCmd
 
-			var showList []*omoney.Transaction
-			if len(acc.Transactions) > 10 {
-				showList = acc.Transactions[:10]
-			} else {
-				showList = acc.Transactions
+			showList, err := model.GetTransactionsByAccount(accId)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			// Truncate list to 10 max transactions
+			// (until I write more flags)
+			if len(showList) > 10 {
+				showList = showList[:10]
 			}
 
 			invert := acc.Type != omoney.CreditCard
 			oview.ShowTransactions(showList, invert, len(workingList))
 
 			for i := range showList {
-				workingList = append(workingList, showList[i])
+				workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
 			}
 		} else {
 			// `ls (-l)`
@@ -315,7 +329,7 @@ func listCmd(tokens []string) {
 				ops.ShowId = true
 				ops.ShowAnchor = true
 			}
-			oview.ShowAccounts(maps.Values(model.Accounts), ops)
+			oview.ShowAccounts(model, ops)
 		}
 
 	}
@@ -337,8 +351,6 @@ func aliasCmd(tokens []string) {
 	err = model.SetAlias(flags["<>"][0], flags["<>"][1])
 	if err != nil {
 		log.Printf("Error: %s\n", err)
-	} else {
-		ocli.Save(model)
 	}
 
 }
@@ -373,18 +385,21 @@ func removeCmd(tokens []string) {
 
 	input := flags["<>"][0]
 	if flag == "working" {
-		item, err := fromWorkingList(input, workingList)
+		item, err := fromWorkingList(input)
 		if err != nil {
 			log.Printf("Could not find item in working list.\nError: %s\n", err)
 			return
 		}
 
-		if transaction, ok := item.(*omoney.Transaction); ok {
+		if transaction, ok := item.(omoney.Transaction); ok {
 			log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
-			tr = transaction
-		} else if account, ok := item.(*omoney.Account); ok {
+			tr = &transaction
+		} else if account, ok := item.(omoney.Account); ok {
 			log.Printf("Pulled account %s from working list\n", account.Alias)
-			acc = account
+			acc = &account
+		} else {
+			log.Println("Failed to recognize type of item from working list")
+			return
 		}
 	}
 
@@ -402,8 +417,6 @@ func removeCmd(tokens []string) {
 
 	if err != nil {
 		log.Println(err)
-	} else {
-		ocli.Save(model)
 	}
 
 }
@@ -428,7 +441,6 @@ func accountCmd(tokens []string) {
 		if err != nil {
 			log.Printf("Error: %s\n", err)
 		} else {
-			ocli.Save(model)
 			acc, _ := model.GetAccount(input)
 			log.Printf("Updated anchor to $%.2f on %s", acc.AnchorBalance, acc.AnchorTime.Format("2006/01/02"))
 		}
@@ -474,9 +486,9 @@ func transactionsCmd(tokens []string) {
 	}
 
 	input := flags["<>"][0]
-	acc, err := model.GetAccount(input)
-	if err != nil {
-		log.Println(err)
+	accId := model.GetAccountId(input)
+	if accId == "" {
+		log.Printf("Alias %s not recognized.\n", input)
 		return
 	}
 
@@ -484,18 +496,18 @@ func transactionsCmd(tokens []string) {
 
 	// Limit printed transactions to 10
 	// TODO add flag to print specific number of transactions
-	var showList []*omoney.Transaction
-	if len(acc.Transactions) > 10 {
-		showList = acc.Transactions[:10]
-	} else {
-		showList = acc.Transactions
+	// TODO get the most recent transactions
+	showList, err := model.GetTransactionsByAccount(accId)
+	if len(showList) > 10 {
+		showList = showList[:10]
 	}
 
+	acc, _ := model.GetAccount(accId)
 	invert := acc.Type != omoney.CreditCard
 	oview.ShowTransactions(showList, invert, len(workingList))
 
 	for i := range showList {
-		workingList = append(workingList, showList[i])
+		workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
 	}
 
 }
@@ -514,13 +526,9 @@ func importCmd(tokens []string) {
 	}
 
 	input := flags["<>"][0]
-	newTrans := ocli.ReadCsv(input, model.Aliases)
+	newTrans := ocli.ReadCsv(input, model.GetAliases())
 	for _, tr := range newTrans {
 		model.AddTransaction(tr)
-	}
-	err = ocli.Save(model)
-	if err != nil {
-		log.Fatalln(err)
 	}
 
 }
@@ -543,7 +551,7 @@ func printCmd(tokens []string) {
 	_, long := flags["-l"]
 	arg := flags["<>"][0]
 
-	v, err := fromWorkingList(arg, workingList)
+	v, err := fromWorkingList(arg)
 	if err != nil {
 		log.Printf("Error: %s\n", err)
 		return
@@ -552,7 +560,7 @@ func printCmd(tokens []string) {
 	switch t := v.(type) {
 	default:
 		fmt.Printf("%v\n", v)
-	case *omoney.Transaction:
+	case omoney.Transaction:
 		ops := ocli.ShowTransactionOptions{}
 		if long {
 			ops.ShowId = true
@@ -560,7 +568,7 @@ func printCmd(tokens []string) {
 			ops.ShowInstDesc = true
 			ops.ShowDesc = true
 		}
-		oview.ShowTransaction(*t, ops)
+		oview.ShowTransaction(t, ops)
 	}
 
 }
@@ -595,10 +603,6 @@ func newCmd(tokens []string) {
 			return
 		}
 		model.AddAccount(*acc)
-		err = ocli.Save(model)
-		if err != nil {
-			log.Fatalln(err)
-		}
 	case "transaction", "tr":
 		// new tr [acc] [payee] [amount] (date) (cat)
 		//      (desc) (-t/--time date) (-c/--category cat) (-d/--description desc)
@@ -611,10 +615,14 @@ func newCmd(tokens []string) {
 		// if account is valid alias, replace with ID
 		// else if account is not valid id, error
 		if model.IsValidAccountAlias(tokens[1]) {
+			alias := tokens[1]
 			tokens[1] = model.GetAccountId(tokens[1])
+			log.Printf("converted alias %s to accid %s\n", alias, tokens[1])
 		} else if !model.IsValidAccountId(tokens[1]) {
 			log.Printf("Error: %s is not a valid account alias or id\n", tokens[1])
 			return
+		} else {
+			log.Printf("Continuing with provided account id %s\n", tokens[1])
 		}
 
 		// trim 'tr' off front of cmd
@@ -631,10 +639,6 @@ func newCmd(tokens []string) {
 		// up to date budget model
 		model.AddTransaction(tr)
 		log.Printf("Saving new transaction %+v\n", tr)
-		err := ocli.Save(model)
-		if err != nil {
-			log.Fatalln(err)
-		}
 	default:
 		log.Printf("Error: unknown subcommand %s\n", tokens[1])
 		log.Println("Valid subcommands are: account, transaction")
@@ -674,9 +678,9 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 				return errors.New("alias must contain only letters, numbers, or underscore")
 			}
 
-			if _, ok := model.Aliases[input]; ok {
-				return errors.New("that alias is already in use")
-			}
+			// if _, ok := model.Aliases[input]; ok {
+			// 	return errors.New("that alias is already in use")
+			// }
 			return nil
 		},
 	}
@@ -691,20 +695,23 @@ func linkNewInstitution(model *omoney.Model, client *plaid.APIClient, countries 
 
 	// Store the long term access token from plaid
 	model.AddAccount(*acc)
-	err = ocli.Save(model)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 }
 
-func fromWorkingList(input string, workingList []interface{}) (interface{}, error) {
+func fromWorkingList(input string) (interface{}, error) {
 	i, err := strconv.Atoi(input)
 	if err != nil || i >= len(workingList) {
 		return nil, fmt.Errorf("%s is not a valid wid", input)
 	}
 
-	return workingList[i], nil
+	pair := workingList[i]
+	if pair.typeName == "transaction" {
+		return model.GetTransactionById(pair.id)
+	} else if pair.typeName == "account" {
+		return model.GetAccount(pair.id)
+	}
+
+	return nil, fmt.Errorf("typename from working list %s not recognized", pair.typeName)
+
 }
 
 func DetectRegion() ([]string, string) {

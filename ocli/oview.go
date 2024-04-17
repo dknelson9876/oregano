@@ -98,7 +98,7 @@ func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	fmt.Println(t)
 }
 
-func (v *OViewPlain) ShowTransactions(trs []*omoney.Transaction, invert bool, startIndex int) {
+func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, startIndex int) {
 	var negAmount int
 	if invert {
 		negAmount = -1
@@ -151,7 +151,7 @@ func (v *OViewPlain) ShowTransaction(tr omoney.Transaction, ops ...ShowTransacti
 	}
 
 	if op.ShowId {
-		rows = append(rows, fmt.Sprintf("Id: %s", tr.UUID))
+		rows = append(rows, fmt.Sprintf("Id: %s", tr.Id))
 	}
 
 	rows = append(rows, fmt.Sprintf("Account: %s", tr.AccountId))
@@ -182,7 +182,9 @@ type ShowAccountOptions struct {
 	ShowId     bool
 }
 
-func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountOptions) {
+func (v *OViewPlain) ShowAccounts(model *omoney.Model, ops ...ShowAccountOptions) {
+	accounts := model.GetAccounts()
+
 	rows := make([][]string, len(accounts))
 	var op ShowAccountOptions
 	var headers []string
@@ -200,8 +202,14 @@ func (v *OViewPlain) ShowAccounts(accounts []omoney.Account, ops ...ShowAccountO
 	}
 
 	headers = append(headers, "BALANCE")
+	// TODO model.getcurrentbalance
 	for i, acc := range accounts {
-		rows[i] = append(rows[i], fmt.Sprintf("$%.2f", acc.CurrentBalance))
+		bal, err := model.GetCurrentBalance(acc.Id)
+		if err != nil {
+			fmt.Printf("Error calculating balance: %s\n", err)
+			return
+		}
+		rows[i] = append(rows[i], fmt.Sprintf("$%.2f", bal))
 	}
 
 	if op.ShowType {
