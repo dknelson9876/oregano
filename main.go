@@ -391,12 +391,15 @@ func removeCmd(tokens []string) {
 			return
 		}
 
-		if transaction, ok := item.(*omoney.Transaction); ok {
+		if transaction, ok := item.(omoney.Transaction); ok {
 			log.Printf("Pulled transaction of amount %.2f from working list\n", transaction.Amount)
-			tr = transaction
-		} else if account, ok := item.(*omoney.Account); ok {
+			tr = &transaction
+		} else if account, ok := item.(omoney.Account); ok {
 			log.Printf("Pulled account %s from working list\n", account.Alias)
-			acc = account
+			acc = &account
+		} else {
+			log.Println("Failed to recognize type of item from working list")
+			return
 		}
 	}
 
