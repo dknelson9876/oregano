@@ -127,7 +127,7 @@ func (m *Model) GetAccountId(alias string) string {
 	id := ""
 	m.db.NewSelect().
 		Model((*Account)(nil)).
-		Column("alias").
+		Column("id").
 		Where("alias = ?", alias).
 		Scan(context.TODO(), &id)
 	return id
@@ -198,7 +198,7 @@ func (m *Model) SetAlias(id string, alias string) error {
 		Set("alias = ?", alias).
 		Where("id = ?", id).
 		Scan(context.TODO())
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows{
 		return err
 	}
 	return nil
@@ -220,13 +220,14 @@ func (m *Model) SetAnchor(account string, anchor []string) error {
 		return err
 	}
 
-	var acc Account
+	acc := &Account{}
 
 	err = m.db.NewSelect().
 		Model(acc).
 		Where("id = ?", id).
 		Scan(context.TODO())
 	if err != nil {
+		fmt.Printf("set anchor failed: %s\n", err)
 		return err
 	}
 
@@ -241,6 +242,28 @@ func (m *Model) SetAnchor(account string, anchor []string) error {
 		Exec(context.TODO())
 
 	return err
+}
+
+func (m *Model) GetCurrentBalance(accId string) (float64, error) {
+	sum := 0.0
+	err := m.db.NewRaw(
+		"SELECT sum(amount) FROM transactions WHERE account_id = ? AND date > (SELECT anchor_time FROM accounts WHERE id = ?)",
+		bun.Ident(accId), bun.Ident(accId),
+		).Scan(context.TODO(), &sum)
+	if err != nil {
+		return 0, err
+	}
+
+	anchor := 0.0
+	err = m.db.NewSelect().
+		Model((*Account)(nil)).
+		Column("anchor_balance").
+		Scan(context.TODO(), &anchor)
+	if err != nil {
+		return 0, err
+	}
+
+	return sum + anchor, nil
 }
 
 func (m *Model) AddTransaction(tr *Transaction) error {

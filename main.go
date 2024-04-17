@@ -258,7 +258,7 @@ func listCmd(tokens []string) {
 	long := false
 	input := ""
 	if len(tokens) == 1 {
-		oview.ShowAccounts(model.GetAccounts(), ocli.ShowAccountOptions{ShowType: true})
+		oview.ShowAccounts(model, ocli.ShowAccountOptions{ShowType: true})
 		return
 	} else if len(tokens) > 1 {
 		i := 1
@@ -329,7 +329,7 @@ func listCmd(tokens []string) {
 				ops.ShowId = true
 				ops.ShowAnchor = true
 			}
-			oview.ShowAccounts((model.GetAccounts()), ops)
+			oview.ShowAccounts(model, ops)
 		}
 
 	}
@@ -493,6 +493,7 @@ func transactionsCmd(tokens []string) {
 
 	// Limit printed transactions to 10
 	// TODO add flag to print specific number of transactions
+	// TODO get the most recent transactions
 	showList, err := model.GetTransactionsByAccount(accId)
 	if len(showList) > 10 {
 		showList = showList[:10]
@@ -556,7 +557,7 @@ func printCmd(tokens []string) {
 	switch t := v.(type) {
 	default:
 		fmt.Printf("%v\n", v)
-	case *omoney.Transaction:
+	case omoney.Transaction:
 		ops := ocli.ShowTransactionOptions{}
 		if long {
 			ops.ShowId = true
@@ -564,7 +565,7 @@ func printCmd(tokens []string) {
 			ops.ShowInstDesc = true
 			ops.ShowDesc = true
 		}
-		oview.ShowTransaction(*t, ops)
+		oview.ShowTransaction(t, ops)
 	}
 
 }
@@ -611,10 +612,14 @@ func newCmd(tokens []string) {
 		// if account is valid alias, replace with ID
 		// else if account is not valid id, error
 		if model.IsValidAccountAlias(tokens[1]) {
+			alias := tokens[1]
 			tokens[1] = model.GetAccountId(tokens[1])
+			log.Printf("converted alias %s to accid %s\n", alias, tokens[1])
 		} else if !model.IsValidAccountId(tokens[1]) {
 			log.Printf("Error: %s is not a valid account alias or id\n", tokens[1])
 			return
+		} else {
+			log.Printf("Continuing with provided account id %s\n", tokens[1])
 		}
 
 		// trim 'tr' off front of cmd

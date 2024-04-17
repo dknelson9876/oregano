@@ -335,3 +335,29 @@ func TestGetTransactionsByAccount(t *testing.T) {
 		}
 	}
 }
+
+func TestGetCurrentBalance(t *testing.T) {
+	m := &Model{db: CreateEmptyDB()}
+	acc := *NewAccount(WithAlias("dummy"))
+	m.AddAccount(acc)
+
+	for i := 0; i < 10; i++ {
+		tr := NewTransaction(acc.Id, fmt.Sprintf("bus%d", i), float64(i))
+		err := m.AddTransaction(tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	received, err := m.GetCurrentBalance(acc.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if received != 45 {
+		t.Fatalf("GetCurrentBalance failed"+
+			"\nhave: %f"+
+			"\nneed: %d",
+			received, 45)
+	}
+}
