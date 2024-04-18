@@ -3,9 +3,11 @@ package omoney
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 )
 
 // A representation of a single transaction that took place between two
@@ -126,12 +128,43 @@ func (m *Model) GetTransactionById(id string) (Transaction, error) {
 	return *tr, err
 }
 
-func (m *Model) GetTransactionsByAccount(accId string) ([]Transaction, error) {
+type GetTransactionsOptions struct {
+	Count     int
+	StartDate *time.Time
+	EndDate   *time.Time
+}
+
+func (m *Model) GetTransactionsByAccount(accId string, ops ...GetTransactionsOptions) ([]Transaction, error) {
 	var trs []Transaction
-	err := m.db.NewSelect().
-		Model(&trs).
-		Where("account_id = ?", accId).
-		Scan(context.TODO())
+
+	var op GetTransactionsOptions
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		op = GetTransactionsOptions{Count: 10}
+	}
+
+	var query strings.Builder
+	var args []interface{}
+
+	query.WriteString("SELECT * FROM transactions WHERE account_id = ?")
+	args = append(args, bun.Ident(accId))
+
+	if op.StartDate != nil {
+		query.WriteString(" AND date > ?")
+		args = append(args, op.StartDate.Format("2006-01-02 15:04:05-07:00"))
+	}
+
+	if op.EndDate != nil {
+		query.WriteString(" AND date < ?")
+		args = append(args, op.EndDate.Format("2006-01-02 15:04:05-07:00"))
+	}
+
+	query.WriteString(" ORDER BY date DESC LIMIT ?")
+	args = append(args, op.Count)
+
+	err := m.db.NewRaw(query.String(), args...).Scan(context.TODO(), &trs)
+
 	return trs, err
 }
 

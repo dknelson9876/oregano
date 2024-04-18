@@ -98,7 +98,8 @@ func (v *OViewPlain) ShowPlaidAccounts(accounts []plaid.AccountBase) {
 	fmt.Println(t)
 }
 
-func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, startIndex int) {
+// workingIndex: the current length of the workinglist, so that new wid's can be printed
+func ShowTransactions(trs []omoney.Transaction, invert bool, workingIndex int) {
 	var negAmount int
 	if invert {
 		negAmount = -1
@@ -109,7 +110,7 @@ func (v *OViewPlain) ShowTransactions(trs []omoney.Transaction, invert bool, sta
 	var rows [][]string
 	for i, tr := range trs {
 		thisRow := []string{
-			strconv.Itoa(startIndex + i),
+			strconv.Itoa(workingIndex + i),
 			tr.Date.Format("2006/01/02"),
 			tr.Payee,
 			tr.Category,

@@ -255,81 +255,40 @@ func main() {
 //   - if a string id is provided, it will be assumed to be an account alias
 //     and transactions in that account will be printed
 func listCmd(tokens []string) {
-	long := false
-	input := ""
 	if len(tokens) == 1 {
 		oview.ShowAccounts(model, ocli.ShowAccountOptions{ShowType: true})
 		return
 	} else if len(tokens) > 1 {
-		i := 1
-		for i < len(tokens) {
-			token := tokens[i]
-			//TODO do I prevent account aliases from starting with '-'?
+		// Require that if an account is provided, it is the first argument
+		//TODO do I prevent account aliases from starting with '-'?
+		if strings.HasPrefix(tokens[1], "-") {
+			// straight to flags without account name -> list accounts
+			// ls (-l)
 
-			if strings.HasPrefix(token, "-") {
-				if token == "-l" || token == "--long" {
-					long = true
-					i++
-
-				} else {
-					log.Println("Error: unknown flag")
-					return
-				}
-
+			long := false
+			if tokens[1] == "-l" {
+				long = true
 			} else {
-				input = token
-				i++
-			}
-		}
-
-		if input != "" {
-			// string was provided, so treat as account name
-			// and attempt to list transactions from it
-			// ls BOA (-l)
-
-			acc, err := model.GetAccount(input)
-			if err != nil {
-				log.Println(err)
+				log.Println("Error: unknown flag")
 				return
 			}
 
-			accId := model.GetAccountId(input)
-			if accId == "" {
-				log.Printf("Alias %s not recognized.\n", input)
-				return
-			}
-
-			// CONTINUE HERE: a lot of todos here
-			// TODO implement -l for listing transactions
-			// TODO implement -n for listing transactions
-			// TODO this has a lot of code in common with transactionsCmd
-
-			showList, err := model.GetTransactionsByAccount(accId)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-
-			// Truncate list to 10 max transactions
-			// (until I write more flags)
-			if len(showList) > 10 {
-				showList = showList[:10]
-			}
-
-			invert := acc.Type != omoney.CreditCard
-			oview.ShowTransactions(showList, invert, len(workingList))
-
-			for i := range showList {
-				workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
-			}
-		} else {
-			// `ls (-l)`
 			ops := ocli.ShowAccountOptions{ShowType: true}
 			if long {
 				ops.ShowId = true
 				ops.ShowAnchor = true
 			}
 			oview.ShowAccounts(model, ops)
+		} else {
+			// has account name -> list transactions
+			// ls BOA (-l) (--start/end <date>) (--num <n>)
+			// TODO this has a lot of code in common with transactionsCmd
+
+			list := ocli.ListTransactions(tokens, model, len(workingList))
+
+			for i := range list {
+				workingList = append(workingList, WorkTuple{"transaction", list[i].Id})
+			}
 		}
 
 	}
@@ -473,41 +432,10 @@ func accountCmd(tokens []string) {
 }
 
 func transactionsCmd(tokens []string) {
-	validFlags := map[string]int{
-		"<>": 1,
-	}
+	list := ocli.ListTransactions(tokens, model, len(workingList))
 
-	flags, err := ocli.ParseTokensToFlags(tokens, validFlags)
-	if err != nil {
-		log.Println("Fail to parse 'trs' command")
-		log.Println("Usage: trs [alias/id]")
-		log.Println("Use 'help transactions' for details")
-		return
-	}
-
-	input := flags["<>"][0]
-	accId := model.GetAccountId(input)
-	if accId == "" {
-		log.Printf("Alias %s not recognized.\n", input)
-		return
-	}
-
-	// TODO add flag for date range of transactions
-
-	// Limit printed transactions to 10
-	// TODO add flag to print specific number of transactions
-	// TODO get the most recent transactions
-	showList, err := model.GetTransactionsByAccount(accId)
-	if len(showList) > 10 {
-		showList = showList[:10]
-	}
-
-	acc, _ := model.GetAccount(accId)
-	invert := acc.Type != omoney.CreditCard
-	oview.ShowTransactions(showList, invert, len(workingList))
-
-	for i := range showList {
-		workingList = append(workingList, WorkTuple{"transaction", showList[i].Id})
+	for i := range list {
+		workingList = append(workingList, WorkTuple{"transaction", list[i].Id})
 	}
 
 }

@@ -154,3 +154,78 @@ func ParseTokensToFlags(tokens []string, flagMap map[string]int) (map[string][]s
 
 	return toreturn, nil
 }
+
+// example input: [ls <account> -n 20 -l]
+//
+// return the list of transactions printed, for the working list
+func ListTransactions(input []string, model *omoney.Model, workingIndex int) []omoney.Transaction {
+	// -l	long: show all possible details about each transaction
+	// --num	number: an integer number of transactions to print (default: 10)
+	// --start	a time for the oldest transaction cutoff
+	// --end    a time for the newest transaction cutoff
+
+	acc, err := model.GetAccount(input[1])
+	if err != nil {
+		fmt.Printf("Alias %s not recognized\n", input[0])
+		return nil
+	}
+
+	filterOps := omoney.GetTransactionsOptions{Count: 10}
+	showOps := ShowTransactionOptions{}
+
+	i := 2
+	for i < len(input) {
+		if strings.HasPrefix(input[i], "-") {
+			switch input[i] {
+			case "-l":
+				showOps.ShowId = true
+				showOps.ShowCategory = true
+				showOps.ShowInstDesc = true
+				showOps.ShowDesc = true
+				i++
+			case "--num":
+				n, err := strconv.Atoi(input[i+1])
+				if err != nil {
+					fmt.Printf("Failed to parse number %s\n", input[i+1])
+					return nil
+				}
+				filterOps.Count = n
+				i += 2
+			case "--start":
+				date, err := dateparse.ParseLocal(input[i+1])
+				if err != nil {
+					fmt.Printf("Failed to parse date %s\n", input[i+1])
+					return nil
+				}
+				filterOps.StartDate = &date
+				i += 2
+			case "--end":
+				date, err := dateparse.ParseLocal(input[i+1])
+				if err != nil {
+					fmt.Printf("Failed to parse date %s\n", input[i+1])
+					return nil
+				}
+				filterOps.EndDate = &date
+				i += 2
+			default:
+				fmt.Printf("Unknown flag: %s\n", input[i])
+				return nil
+			}
+		} else {
+			fmt.Println("Failed to parse command")
+			return nil
+		}
+	}
+
+	list, err := model.GetTransactionsByAccount(acc.Id, filterOps)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return nil
+	}
+
+	invert := acc.Type != omoney.CreditCard
+	ShowTransactions(list, invert, workingIndex)
+
+	return list
+
+}
