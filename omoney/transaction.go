@@ -2,6 +2,7 @@ package omoney
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -46,6 +47,10 @@ type Transaction struct {
 	// Optional field which defaults to empty string.
 	Description string
 }
+
+const (
+	dateFormatStr = "2006-01-02 15:04:05-07:00"
+)
 
 type TransactionOption func(*Transaction)
 
@@ -152,12 +157,12 @@ func (m *Model) GetTransactionsByAccount(accId string, ops ...GetTransactionsOpt
 
 	if op.StartDate != nil {
 		query.WriteString(" AND date > ?")
-		args = append(args, op.StartDate.Format("2006-01-02 15:04:05-07:00"))
+		args = append(args, op.StartDate.Format(dateFormatStr))
 	}
 
 	if op.EndDate != nil {
 		query.WriteString(" AND date < ?")
-		args = append(args, op.EndDate.Format("2006-01-02 15:04:05-07:00"))
+		args = append(args, op.EndDate.Format(dateFormatStr))
 	}
 
 	query.WriteString(" ORDER BY date DESC LIMIT ?")
@@ -166,6 +171,49 @@ func (m *Model) GetTransactionsByAccount(accId string, ops ...GetTransactionsOpt
 	err := m.db.NewRaw(query.String(), args...).Scan(context.TODO(), &trs)
 
 	return trs, err
+}
+
+type UpdateTransactionOptions struct {
+	fieldName string
+	newVal    interface{}
+}
+
+func WithAccountUpdate(accId string) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"account_id = ?", accId}
+}
+
+func WithPayeeUpdate(payee string) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"payee = ?", payee}
+}
+
+func WithAmountUpdate(amount float64) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"amount = ?", amount}
+}
+
+func WithDateUpdate(date time.Time) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"date = ?", date}
+}
+
+func WithCategoryUpdate(category string) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"category = ?", category}
+}
+
+func WithDescUpdate(desc string) UpdateTransactionOptions {
+	return UpdateTransactionOptions{"description = ?", desc}
+}
+
+func (m *Model) UpdateTransaction(id string, ops ...UpdateTransactionOptions) error {
+	query := m.db.NewUpdate().Model((*Transaction)(nil)).Where("id = ?", id)
+
+	for _, op := range ops {
+		query = query.Set(op.fieldName, op.newVal)
+	}
+
+	err := query.Scan(context.TODO())
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	return nil
 }
 
 func (m *Model) RemoveTransaction(tr *Transaction) error {
