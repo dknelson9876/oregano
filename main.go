@@ -165,6 +165,9 @@ func main() {
 					log.Println("\tor don't provide an alias to list all accounts")
 					log.Println("usage: ls (alias) (options)")
 					log.Println("\t-l\t(long) Show more details")
+					log.Println("\t--num [n]\tList n transactions (default 10)")
+					log.Println("\t--start [date]\tFilter transactions by earliest date")
+					log.Println("\t--end [date]\tFilter transactions by latest date")
 				case "alias":
 					log.Println("alias - Assign a new alias to an account")
 					log.Println("\tAssigns the alias [alias] as the alias of ")
@@ -213,7 +216,7 @@ func main() {
 				}
 				continue
 			}
-			log.Println("oregano-cli - Terminal budgeting app" +
+			log.Println("oregano-cli - Terminal budgeting app\n" +
 				"Commands:\n" +
 				"* help (h)\t\tPrint this menu\n" +
 				"* quit (q)\t\tQuit oregano\n" +
@@ -222,9 +225,10 @@ func main() {
 				"* alias [id] [alias]\tAssign [alias] as the new alias for [id]\n" +
 				"* remove (rm) [alias/id...]\tRemove a linked institution\n" +
 				"* account (acc) [alias/id...]\tPrint details about specific account(s)\n" +
-				"* transactions (trs) [alias/id]\t TODO description\n" +
-				"* import [filename]\t TODO description\n" +
+				"* transactions (trs) [alias/id]\t List transactions from a specific account\n" +
+				"* import [filename]\t Import transactions from a csv file\n" +
 				"* print (p) [argument index]\tPrint more details about something that was output\n" +
+				"* edit (e) [wid]\tEdit the fields of a transaction\n"+
 				"* repair\t\tUsing higher level data as authoritative, correct inconsistencies\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
