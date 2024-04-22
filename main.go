@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Xuanwo/go-locale"
+	"github.com/araddon/dateparse"
 	"github.com/dknelson9876/oregano/ocli"
 	"github.com/dknelson9876/oregano/omoney"
 	"github.com/google/shlex"
@@ -195,6 +196,16 @@ func main() {
 					log.Println("print - print more information about a transaction from the working list")
 					log.Println("usage: p [wid] (options)")
 					log.Println("\t-l\t(long) Show even more details about the transaction")
+				case "e", "edit":
+					log.Println("edit - edit information about a transaction, by setting with")
+					log.Println("\t specific flags which fields to change")
+					log.Println("usage: e [wid] (options)")
+					log.Println("\t--account <account>")
+					log.Println("\t--payee <payee>")
+					log.Println("\t--amount <amount>")
+					log.Println("\t--date <date>")
+					log.Println("\t--category <category>")
+					log.Println("\t--desc <desc>")
 				case "new":
 					log.Println("new - manually create account or transaction")
 					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
@@ -239,6 +250,8 @@ func main() {
 			importCmd(tokens)
 		case "print", "p":
 			printCmd(tokens)
+		case "edit", "e":
+			editCmd(tokens)
 		case "repair":
 			model.RepairAccounts()
 		case "new":
@@ -499,6 +512,70 @@ func printCmd(tokens []string) {
 		oview.ShowTransaction(t, ops)
 	}
 
+}
+
+// e <wid> (--account/--payee/--amount/--date/--category/--desc)
+func editCmd(tokens []string) {
+	if len(tokens) < 2 {
+		log.Println("Error: not enough arguments")
+		return
+	}
+
+	v, err := fromWorkingList(tokens[1])
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+		return
+	}
+	tr, ok := v.(omoney.Transaction)
+	if !ok {
+		log.Println("Error: wid does not point to a transaction")
+		return
+	}
+
+	ops := make([]omoney.UpdateTransactionOptions, 0)
+	i := 2
+	for i < len(tokens)-1 {
+		switch tokens[i] {
+		case "--account":
+			acc, err := model.GetAccount(tokens[i+1])
+			if err != nil {
+				log.Printf("Error: %s\n", err)
+				return
+			}
+			ops = append(ops, omoney.WithAccountUpdate(acc.Id))
+			i += 2
+		case "--payee":
+			ops = append(ops, omoney.WithPayeeUpdate(tokens[i+1]))
+			i += 2
+		case "--amount":
+			amount, err := strconv.ParseFloat(tokens[i+1], 64)
+			if err != nil {
+				log.Println("Error: failed to parse amount")
+				return
+			}
+			ops = append(ops, omoney.WithAmountUpdate(amount))
+			i += 2
+		case "--date":
+			date, err := dateparse.ParseLocal(tokens[i+1])
+			if err != nil {
+				log.Println("Error: failed to parse date")
+				return
+			}
+			ops = append(ops, omoney.WithDateUpdate(date))
+			i += 2
+		case "--category":
+			ops = append(ops, omoney.WithCategoryUpdate(tokens[i+1]))
+			i += 2
+		case "--desc":
+			ops = append(ops, omoney.WithDescUpdate(tokens[i+1]))
+			i += 2
+		}
+	}
+
+	err = model.UpdateTransaction(tr.Id, ops...)
+	if err != nil {
+		log.Printf("Error: %s\n", err)
+	}
 }
 
 func newCmd(tokens []string) {
