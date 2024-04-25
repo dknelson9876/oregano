@@ -213,6 +213,14 @@ func main() {
 					log.Println("new - manually create account or transaction")
 					log.Println("* new account [alias] [type]\t\tcreate a new manual account")
 					log.Println("* new transaction []...\t\t TODO")
+				case "r", "report":
+					log.Println("report - report information about spending")
+					log.Println("usage: r (options)")
+					log.Println("\t--by <type>\tset how to sort transactions. Valid types are: category, payee")
+					log.Println("\t--start <date>\tspecify the start date of when to count transactions (default: 1st of current month)")
+					log.Println("\t--end <date>\tspecify when to stop including transactions (mutually exclusive with --range)")
+					log.Println("\t--range <value>\thow long from --start to include transactions. Valid values: day, month, year ")
+					log.Println("\t\tdefault: month, mutually exclusive with --end)")
 				}
 				continue
 			}
@@ -230,6 +238,7 @@ func main() {
 				"* print (p) [argument index]\tPrint more details about something that was output\n" +
 				"* edit (e) [wid]\tEdit the fields of a transaction\n"+
 				"* repair\t\tUsing higher level data as authoritative, correct inconsistencies\n" +
+				"* report (r)\t\tgenerate reports about spending\n" +
 				"* new ...\t\tmanually create account or transaction")
 		case "q", "quit":
 			return
@@ -256,6 +265,8 @@ func main() {
 			printCmd(tokens)
 		case "edit", "e":
 			editCmd(tokens)
+		case "report", "r":
+			reportCmd(tokens)
 		case "repair":
 			model.RepairAccounts()
 		case "new":
@@ -516,6 +527,11 @@ func printCmd(tokens []string) {
 		oview.ShowTransaction(t, ops)
 	}
 
+}
+
+// r (--by/--start/--end/--range)
+func reportCmd(tokens []string) {
+	ocli.ListReport(tokens, model)
 }
 
 // e <wid> (--account/--payee/--amount/--date/--category/--desc)

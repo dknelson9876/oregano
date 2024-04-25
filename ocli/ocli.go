@@ -229,3 +229,11 @@ func ListTransactions(input []string, model *omoney.Model, workingIndex int) []o
 	return list
 
 }
+
+// example input: r --by payee --start 2023/06 --range month
+func ListReport(input []string, model *omoney.Model) {
+	// --by {category, payee}
+	// --start <date>
+	// --end <date>
+	// --range {day, month, year}
+}
