@@ -248,3 +248,9 @@ func (v *OViewPlain) ShowAccount(acc omoney.Account) {
 		acc.GetAnchorBalance(),
 		acc.GetAnchorTime())
 }
+
+func ShowReport(list map[string]float64) {
+	for label, value := range list {
+		fmt.Printf("%s:\t$%.2f\n", label, value)
+	}
+}

@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/araddon/dateparse"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
+	"github.com/uptrace/bun/extra/bundebug"
 )
 
 const (
@@ -31,6 +34,11 @@ func NewModelFromDB(filepath string) (*Model, error) {
 	}
 
 	db := bun.NewDB(sqldb, sqlitedialect.New())
+
+	// db.AddQueryHook(bundebug.NewQueryHook(
+	// 	bundebug.WithEnabled(true),
+	// 	bundebug.WithVerbose(true),
+	// 	bundebug.WithWriter(os.Stdout)))
 
 	_, err = db.NewCreateTable().
 		Model((*Account)(nil)).
@@ -198,7 +206,7 @@ func (m *Model) SetAlias(id string, alias string) error {
 		Set("alias = ?", alias).
 		Where("id = ?", id).
 		Scan(context.TODO())
-	if err != nil && err != sql.ErrNoRows{
+	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	return nil
@@ -249,7 +257,7 @@ func (m *Model) GetCurrentBalance(accId string) (float64, error) {
 	err := m.db.NewRaw(
 		"SELECT sum(amount) FROM transactions WHERE account_id = ? AND date > (SELECT anchor_time FROM accounts WHERE id = ?)",
 		bun.Ident(accId), bun.Ident(accId),
-		).Scan(context.TODO(), &sum)
+	).Scan(context.TODO(), &sum)
 	if err != nil {
 		return 0, err
 	}
@@ -267,3 +275,44 @@ func (m *Model) GetCurrentBalance(accId string) (float64, error) {
 	return sum + anchor, nil
 }
 
+type GetSumsOptions struct {
+	StartDate *time.Time
+	EndDate   *time.Time
+	Range     string
+	Grouping  string // equivalent to a field of transactions
+}
+
+func (m *Model) GetTransactionSums(ops ...GetSumsOptions) (map[string]float64, error) {
+	var op GetSumsOptions
+	if len(ops) == 1 {
+		op = ops[0]
+	} else {
+		panic("Failed to pass options to getTransactionSums")
+	}
+
+	var labels []string
+	var values []float64
+
+	err := m.db.NewSelect().
+		Model((*Transaction)(nil)).
+		ColumnExpr(fmt.Sprintf("%s, sum(amount)", op.Grouping)).
+		Where("date > ?", op.StartDate.Format(dateFormatStr)).
+		Where("date < ?", op.EndDate.Format(dateFormatStr)).
+		Group(op.Grouping).
+		Order("amount DESC").
+		Scan(context.TODO(), &labels, &values)
+	if err != nil {
+		return nil, err
+	}
+
+	return ToMap(labels, values), nil
+
+}
+
+func ToMap[K comparable, V any](keys []K, values []V) map[K]V {
+	resultMap := make(map[K]V)
+	for i, key := range keys {
+		resultMap[key] = values[i]
+	}
+	return resultMap
+}

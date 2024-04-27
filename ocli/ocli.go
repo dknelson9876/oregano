@@ -236,4 +236,85 @@ func ListReport(input []string, model *omoney.Model) {
 	// --start <date>
 	// --end <date>
 	// --range {day, month, year}
+
+	getOps := omoney.GetSumsOptions{}
+
+	i := 1
+	for i < len(input) {
+		if strings.HasPrefix(input[i], "-") {
+			switch input[i] {
+			case "--by":
+				if input[i+1] == "category" || input[i+1] == "payee" {
+					getOps.Grouping = input[i+1]
+					i += 2
+				} else {
+					fmt.Printf("Invalid --by option: %s\n", input[i+1])
+					return
+				}
+			case "--start":
+				date, err := dateparse.ParseLocal(input[i+1])
+				if err != nil {
+					fmt.Printf("Failed to parse date %s\n", input[i+1])
+					return
+				}
+				getOps.StartDate = &date
+				i += 2
+			case "--end":
+				if getOps.Range != "" {
+					fmt.Println("Error: Cannot use --range and --end at the same time")
+					return
+				}
+				date, err := dateparse.ParseLocal(input[i+1])
+				if err != nil {
+					fmt.Printf("Failed to parse date %s\n", input[i+1])
+					return
+				}
+				getOps.EndDate = &date
+				i += 2
+			case "--range":
+				if getOps.EndDate != nil {
+					fmt.Println("Error: Cannot use --range and --end at the same time")
+					return
+				}
+				if input[i+1] == "day" || input[i+1] == "month" || input[i+1] == "year" {
+					getOps.Range = input[i+1]
+					i += 2
+				} else {
+					fmt.Printf("Invalid --range option: %s\n", input[i+1])
+					return
+				}
+			}
+		} else {
+			fmt.Println("Failed to parse report command")
+			return
+		}
+	}
+
+	if getOps.StartDate == nil {
+		getOps.StartDate = BeginningOfMonth(time.Now())
+	}
+	if getOps.EndDate == nil {
+		getOps.EndDate = EndOfMonth(time.Now())
+	}
+	if getOps.Grouping == "" {
+		getOps.Grouping = "category"
+	}
+
+	list, err := model.GetTransactionSums(getOps)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return
+	}
+
+	ShowReport(list)
+}
+
+func BeginningOfMonth(date time.Time) *time.Time {
+	toreturn := date.AddDate(0, 0, -date.Day()+1)
+	return &toreturn
+}
+
+func EndOfMonth(date time.Time) *time.Time {
+	toreturn := date.AddDate(0, 1, -date.Day())
+	return &toreturn
 }
