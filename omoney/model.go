@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
+	// "os"
 	"strconv"
 	"time"
 
@@ -12,7 +12,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
-	"github.com/uptrace/bun/extra/bundebug"
+	// "github.com/uptrace/bun/extra/bundebug"
 )
 
 const (
@@ -107,7 +107,7 @@ func (m *Model) GetAliases() map[string]string {
 
 	toreturn := make(map[string]string, len(ids))
 	for i := range ids {
-		toreturn[ids[i]] = aliases[i]
+		toreturn[aliases[i]] = ids[i]
 	}
 
 	return toreturn
