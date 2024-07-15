@@ -250,7 +250,20 @@ func (v *OViewPlain) ShowAccount(acc omoney.Account) {
 }
 
 func ShowReport(list map[string]float64) {
+	var rows [][]string
 	for label, value := range list {
-		fmt.Printf("%s:\t$%.2f\n", label, value)
+		thisRow := []string{
+			label,
+			fmt.Sprintf("$%.2f", value),
+		}
+		rows = append(rows, thisRow)
 	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		Headers("LABEL", "AMOUNT").
+		Rows(rows...)
+
+	fmt.Println(t)
 }
+

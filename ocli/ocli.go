@@ -9,6 +9,7 @@ import (
 
 	"github.com/araddon/dateparse"
 	"github.com/dknelson9876/oregano/omoney"
+	"github.com/dknelson9876/oregano/outil"
 )
 
 func CreateManualAccount(input []string) *omoney.Account {
@@ -237,7 +238,8 @@ func ListReport(input []string, model *omoney.Model) {
 	// --end <date>
 	// --range {day, month, year}
 
-	getOps := omoney.GetSumsOptions{}
+	var startDate, endDate outil.Option[time.Time]
+	var date_range, grouping string
 
 	i := 1
 	for i < len(input) {
@@ -245,7 +247,7 @@ func ListReport(input []string, model *omoney.Model) {
 			switch input[i] {
 			case "--by":
 				if input[i+1] == "category" || input[i+1] == "payee" {
-					getOps.Grouping = input[i+1]
+					grouping = input[i+1]
 					i += 2
 				} else {
 					fmt.Printf("Invalid --by option: %s\n", input[i+1])
@@ -257,10 +259,10 @@ func ListReport(input []string, model *omoney.Model) {
 					fmt.Printf("Failed to parse date %s\n", input[i+1])
 					return
 				}
-				getOps.StartDate = &date
+				startDate.Set(date)
 				i += 2
 			case "--end":
-				if getOps.Range != "" {
+				if date_range != "" {
 					fmt.Println("Error: Cannot use --range and --end at the same time")
 					return
 				}
@@ -269,37 +271,44 @@ func ListReport(input []string, model *omoney.Model) {
 					fmt.Printf("Failed to parse date %s\n", input[i+1])
 					return
 				}
-				getOps.EndDate = &date
+				endDate.Set(date)
 				i += 2
 			case "--range":
-				if getOps.EndDate != nil {
+				if endDate.IsSet() {
 					fmt.Println("Error: Cannot use --range and --end at the same time")
 					return
 				}
 				if input[i+1] == "day" || input[i+1] == "month" || input[i+1] == "year" {
-					getOps.Range = input[i+1]
+					date_range = input[i+1]
 					i += 2
 				} else {
 					fmt.Printf("Invalid --range option: %s\n", input[i+1])
 					return
 				}
+			default:
+				fmt.Println("Failed to parse report command")
+				return
 			}
 		} else {
 			fmt.Println("Failed to parse report command")
 			return
 		}
 	}
+	getOps := omoney.GetSumsOptions{Grouping: grouping}
 
-	if getOps.StartDate == nil {
-		getOps.StartDate = BeginningOfMonth(time.Now())
-	}
-	if getOps.EndDate == nil {
-		getOps.EndDate = EndOfMonth(time.Now())
+	// previous code should enforce that only one between {date_range, endDate} are set
+	now := time.Now()
+	var err error
+	getOps.StartDate, getOps.EndDate, err = ParseDateInput(startDate, endDate, date_range, now)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return
 	}
 	if getOps.Grouping == "" {
 		getOps.Grouping = "category"
 	}
 
+	fmt.Printf("Fetching transactions from %v to %v\n", getOps.StartDate, getOps.EndDate)
 	list, err := model.GetTransactionSums(getOps)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
@@ -309,12 +318,98 @@ func ListReport(input []string, model *omoney.Model) {
 	ShowReport(list)
 }
 
-func BeginningOfMonth(date time.Time) *time.Time {
-	toreturn := date.AddDate(0, 0, -date.Day()+1)
-	return &toreturn
+func ParseDateInput(startInput, endInput outil.Option[time.Time], date_range string, now time.Time) (time.Time, time.Time, error) {
+	var startDate, endDate time.Time
+	if date_range != "" {
+		switch date_range {
+		case "day":
+			if startInput.IsSet() {
+				// r --start 2023/05/02 --range day
+				// -> 2023/05/02 - 2023/05/02
+				startDate = startInput.StrongGet()
+				endDate = startInput.StrongGet().AddDate(0, 0, 1)
+			} else {
+				// r --range day
+				// -> 2023/05/02 - 2023/05/02
+				startDate = BeginningOfDay(now)
+				endDate = EndOfDay(now)
+			}
+		case "month":
+			if startInput.IsSet() {
+				// r --start 2023/02 --range month
+				// -> 2023/02/01 - 2023/02/28
+				startDate = startInput.StrongGet()
+				endDate = startInput.StrongGet().AddDate(0, 1, 0)
+			} else {
+				// r --range month
+				// -> 2023/05/01 - 2023/05/31
+				startDate = BeginningOfMonth(now)
+				endDate = EndOfMonth(now)
+			}
+		case "year":
+			if startInput.IsSet() {
+				// r --start 2023/01 --range year
+				startDate = startInput.StrongGet()
+				endDate = startInput.StrongGet().AddDate(1, 0, 0)
+			} else {
+				// r --range year
+				startDate = BeginningOfYear(now)
+				endDate = EndOfYear(now)
+			}
+		}
+	} else if endInput.IsSet() {
+		if startInput.IsSet() {
+			startDate = startInput.StrongGet()
+			endDate = endInput.StrongGet()
+		} else {
+			return now, now, errors.New("cannot use --end without --start")
+		}
+	} else {
+		if startInput.IsSet() {
+			startDate = startInput.StrongGet()
+			endDate = EndOfMonth(startInput.StrongGet())
+		} else {
+			startDate = BeginningOfMonth(time.Now())
+			endDate = EndOfMonth(time.Now())
+		}
+	}
+	return startDate, endDate, nil
 }
 
-func EndOfMonth(date time.Time) *time.Time {
-	toreturn := date.AddDate(0, 1, -date.Day())
-	return &toreturn
+func BeginningOfDay(date time.Time) time.Time {
+	// time.Truncate assumes UTC, so to recognize local time
+	// must manually extract the day value
+	// see https://stackoverflow.com/a/25255294/19302239
+	year, month, day := date.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, date.Location())
 }
+
+func EndOfDay(date time.Time) time.Time {
+	year, month, day := date.Date()
+	return time.Date(year, month, day, 23, 59, 59, 0, date.Location())
+}
+
+func BeginningOfMonth(date time.Time) time.Time {
+	return time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+}
+
+func EndOfMonth(date time.Time) time.Time {
+	// add one month, truncate to the first of that month,
+	// then subtract one second
+	date = date.AddDate(0, 1, 0)
+	date = time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	date = date.Add(time.Second * -1)
+	return date
+}
+
+func BeginningOfYear(date time.Time) time.Time {
+	return time.Date(date.Year(), 1, 1, 0, 0, 0, 0, date.Location())
+}
+
+func EndOfYear(date time.Time) time.Time {
+	date = date.AddDate(1, 0, 0)
+	date = time.Date(date.Year(), 1, 1, 0, 0, 0, 0, date.Location())
+	date = date.Add(time.Second * -1)
+	return date
+}
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
 	// "os"
 	"strconv"
 	"time"
@@ -276,9 +277,8 @@ func (m *Model) GetCurrentBalance(accId string) (float64, error) {
 }
 
 type GetSumsOptions struct {
-	StartDate *time.Time
-	EndDate   *time.Time
-	Range     string
+	StartDate time.Time
+	EndDate   time.Time
 	Grouping  string // equivalent to a field of transactions
 }
 
